@@ -299,6 +299,7 @@ const useAuction = () => useContext(AuctionContext);
 function AuctionProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
+  const [isRemoteUpdate, setIsRemoteUpdate] = useState(false); // Track if update came from Firestore
 
   // Initialize Firebase and sign in user
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -315,7 +316,9 @@ function AuctionProvider({ children }) {
         const unsubscribe = subscribeToAuction((firebaseData) => {
           // Update local state when Firestore changes
           // (from other users' actions)
+          console.log("📨 Received Firestore data in callback:", firebaseData);
           if (firebaseData) {
+            setIsRemoteUpdate(true); // Mark this as a remote update
             dispatch({
               type: "SET_STATE",
               payload: {
@@ -325,6 +328,7 @@ function AuctionProvider({ children }) {
                 livePlayerId: firebaseData.livePlayerId || state.livePlayerId,
               },
             });
+            console.log("✅ Dispatched SET_STATE action");
           }
         });
         
@@ -350,8 +354,8 @@ function AuctionProvider({ children }) {
     localStorage.setItem("cm_history",    JSON.stringify(state.history));
     localStorage.setItem("cm_livePlayer", JSON.stringify(state.livePlayerId));
 
-    // If Firebase is ready, sync to Firestore
-    if (isFirebaseReady) {
+    // Only sync to Firestore if this is a LOCAL change (not from remote listener)
+    if (isFirebaseReady && !isRemoteUpdate) {
       updateAuctionData({
         players: state.players,
         teams: state.teams,
@@ -361,8 +365,11 @@ function AuctionProvider({ children }) {
         console.error("Failed to update Firestore:", error);
         // Continue working even if Firebase sync fails
       });
+    } else if (isRemoteUpdate) {
+      // Reset the flag after handling remote update
+      setIsRemoteUpdate(false);
     }
-  }, [state.players, state.teams, state.history, state.livePlayerId, isFirebaseReady]);
+  }, [state.players, state.teams, state.history, state.livePlayerId, isFirebaseReady, isRemoteUpdate]);
 
   return (
     <AuctionContext.Provider value={{ state, dispatch }}>

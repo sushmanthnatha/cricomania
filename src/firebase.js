@@ -15,6 +15,7 @@ const firebaseConfig = {
   messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "123456789",
   appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:123456789:web:abcdef123456",
 };
+console.log("Firebase Config Loaded:", firebaseConfig);
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -56,6 +57,7 @@ export function subscribeToAuction(callback) {
   const auctionDocRef = doc(db, "auction", "current");
   return onSnapshot(auctionDocRef, (docSnap) => {
     if (docSnap.exists()) {
+      console.log("🔄 Real-time update received:", docSnap.data());
       callback(docSnap.data());
     }
   });
@@ -67,10 +69,12 @@ export function subscribeToAuction(callback) {
 export async function updateAuctionData(data) {
   try {
     const auctionDocRef = doc(db, "auction", "current");
+    console.log("📝 Updating Firestore:", data);
     await setDoc(auctionDocRef, {
       ...data,
       updatedAt: Date.now(),
     }, { merge: true });
+    console.log("✅ Firestore update successful");
   } catch (error) {
     console.error("Error updating auction data:", error);
     throw error;
