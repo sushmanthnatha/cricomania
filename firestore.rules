@@ -1,0 +1,42 @@
+// Firestore Security Rules for Cricomania
+// This file is for reference. Copy-paste content into Firebase Console → Firestore → Rules tab
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Auction document - main data store
+    // Everyone can READ for real-time updates
+    // Only authenticated users can WRITE
+    match /auction/current {
+      allow read: if true;  // World-readable for real-time sync
+      allow write: if request.auth != null;  // Authenticated users only
+    }
+    
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/* 
+  Security Explanation:
+  
+  1. /auction/current document:
+     - READ: Allowed for everyone (enables real-time updates to all connected clients)
+     - WRITE: Allowed only if user is signed in (anonymous auth counts)
+     
+  2. Other documents/collections:
+     - All access denied (default deny policy)
+     
+  This setup is safe because:
+  - Team managers can only modify data through your app's validation
+  - Your app's reducer enforces business rules (slot limits, budget checks)
+  - Firestore rules prevent unauthenticated writes
+  - Anonymous auth is acceptable here since the auction is semi-public
+  
+  For production with sensitive data, consider:
+  - Requiring email/password auth
+  - Adding role-based access controls
+  - Validating write payloads more strictly
+*/

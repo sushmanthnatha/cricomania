@@ -1,9 +1,15 @@
 
 // ============================================================
-//  CRICOMANIA AUCTION — React + Context API + useReducer
-//  Enhanced: slot limits, admin player management, photo support
+//  CRICOMANIA AUCTION — React + Context API + useReducer + Firebase
+//  Enhanced: slot limits, admin player management, photo support, real-time sync
 // ============================================================
 import { createContext, useContext, useReducer, useState, useEffect, useCallback } from "react";
+import { 
+  initializeAuctionData, 
+  subscribeToAuction, 
+  updateAuctionData,
+  signInUser 
+} from "./firebase";
 
 /* ─── GOOGLE FONTS ─────────────────────────────────────────── */
 const FontLoader = () => (
@@ -292,17 +298,81 @@ const useAuction = () => useContext(AuctionContext);
 
 function AuctionProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [isFirebaseReady, setIsFirebaseReady] = useState(false);
 
+  // Initialize Firebase and sign in user
   useEffect(() => {
+    const initFirebase = async () => {
+      try {
+        // Initialize Firebase auth (anonymous)
+        await signInUser();
+        
+        // Initialize Firestore with starting data
+        await initializeAuctionData(PLAYERS_INIT, TEAMS_INIT);
+        
+        // Subscribe to real-time updates from Firestore
+        const unsubscribe = subscribeToAuction((firebaseData) => {
+          // Update local state when Firestore changes
+          // (from other users' actions)
+          if (firebaseData) {
+            dispatch({
+              type: "SET_STATE",
+              payload: {
+                players: firebaseData.players || state.players,
+                teams: firebaseData.teams || state.teams,
+                history: firebaseData.history || state.history,
+                livePlayerId: firebaseData.livePlayerId || state.livePlayerId,
+              },
+            });
+          }
+        });
+        
+        setIsFirebaseReady(true);
+        
+        // Cleanup subscription on unmount
+        return () => unsubscribe?.();
+      } catch (error) {
+        console.error("Firebase initialization failed:", error);
+        console.log("Falling back to localStorage only");
+        setIsFirebaseReady(true); // Continue with localStorage fallback
+      }
+    };
+
+    initFirebase();
+  }, []);
+
+  // Persist to localStorage (backup) and Firebase (primary)
+  useEffect(() => {
+    // Always save to localStorage as fallback
     localStorage.setItem("cm_players",    JSON.stringify(state.players));
     localStorage.setItem("cm_teams",      JSON.stringify(state.teams));
     localStorage.setItem("cm_history",    JSON.stringify(state.history));
     localStorage.setItem("cm_livePlayer", JSON.stringify(state.livePlayerId));
-  }, [state.players, state.teams, state.history, state.livePlayerId]);
+
+    // If Firebase is ready, sync to Firestore
+    if (isFirebaseReady) {
+      updateAuctionData({
+        players: state.players,
+        teams: state.teams,
+        history: state.history,
+        livePlayerId: state.livePlayerId,
+      }).catch(error => {
+        console.error("Failed to update Firestore:", error);
+        // Continue working even if Firebase sync fails
+      });
+    }
+  }, [state.players, state.teams, state.history, state.livePlayerId, isFirebaseReady]);
 
   return (
     <AuctionContext.Provider value={{ state, dispatch }}>
-      {children}
+      {!isFirebaseReady ? (
+        <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
+          <div style={{ marginBottom: 20, fontSize: 18 }}>🔄 Initializing Cricomania...</div>
+          <div style={{ fontSize: 14 }}>Connecting to Firebase</div>
+        </div>
+      ) : (
+        children
+      )}
     </AuctionContext.Provider>
   );
 }
