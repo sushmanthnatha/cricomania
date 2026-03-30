@@ -340,7 +340,7 @@ function AuctionProvider({ children }) {
     };
 
     initFirebase();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist to localStorage (backup) and Firebase (primary)
   useEffect(() => {
