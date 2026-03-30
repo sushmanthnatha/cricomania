@@ -29,6 +29,7 @@ const USERS = {
   mi_mgr:    { pass: "mi2024",     role: "team",  team: "MUMBAI INDIANS",         label: "MUMBAI INDIANS" },
   csk_mgr:   { pass: "csk2024",    role: "team",  team: "CHENNAI SUPER KINGS",   label: "CHENNAI SUPER KINGS" },
   rcb_mgr:   { pass: "rcb2024",    role: "team",  team: "ROYAL CHALLENGERS",     label: "ROYAL CHALLENGERS" },
+  bidder:    { pass: "bidder123",  role: "user",  team: null,                      label: "BIDDER / VIEWER" },
 };
 
 const TEAMS_INIT = {
@@ -171,10 +172,16 @@ function generateStats(role) {
 }
 
 /* ─── REDUCER ───────────────────────────────────────────────── */
+const generateTeamPassword = (teamName) => {
+  const basePass = teamName.toLowerCase().replace(/\s+/g, "").substring(0, 8);
+  return basePass + "2024";
+};
+
 const initialState = {
   currentUser: null,
   players: JSON.parse(localStorage.getItem("cm_players") || "null") || PLAYERS_INIT,
   teams:   JSON.parse(localStorage.getItem("cm_teams")   || "null") || JSON.parse(JSON.stringify(TEAMS_INIT)),
+  teamCredentials: JSON.parse(localStorage.getItem("cm_teamCreds") || "{}"),
   history: JSON.parse(localStorage.getItem("cm_history") || "[]"),
   livePlayerId: JSON.parse(localStorage.getItem("cm_livePlayer") || "null"),
   page: "auction",
@@ -256,7 +263,11 @@ function reducer(state, action) {
     case "ADD_TEAM": {
       const { name, color } = action.payload;
       const teams = { ...state.teams, [name]: { budget: BUDGET, spent: 0, color } };
-      return { ...state, teams };
+      const teamCreds = { ...state.teamCredentials };
+      if (!teamCreds[name]) {
+        teamCreds[name] = { pass: generateTeamPassword(name), label: name };
+      }
+      return { ...state, teams, teamCredentials: teamCreds };
     }
 
     case "EDIT_TEAM": {
@@ -277,6 +288,27 @@ function reducer(state, action) {
         );
         return { ...state, teams, players };
       }
+    }
+
+    case "DELETE_TEAM": {
+      const { teamName } = action.payload;
+      const teams = { ...state.teams };
+      delete teams[teamName];
+      
+      // Remove team credentials
+      const teamCreds = { ...state.teamCredentials };
+      delete teamCreds[teamName];
+      
+      // Unassign any players from this team
+      const players = state.players.map(p =>
+        p.soldTo === teamName ? { ...p, soldTo: null } : p
+      );
+
+      console.log(`🗑️ DELETING TEAM: "${teamName}"`);
+      console.log("Teams after deletion:", teams);
+      console.log("TeamCreds after deletion:", teamCreds);
+      
+      return { ...state, teams, teamCredentials: teamCreds, players };
     }
 
     case "SET_STATE": {
@@ -350,20 +382,19 @@ function AuctionProvider({ children }) {
         // Subscribe to real-time updates from Firestore
         const unsubscribe = subscribeToAuction((firebaseData) => {
           // Update local state when Firestore changes
-          // (from other users' actions)
           console.log("📨 Received Firestore data in callback:", firebaseData);
           if (firebaseData) {
             isRemoteUpdateRef.current = true; // Mark this as a remote update
-            dispatch({
-              type: "SET_STATE",
-              payload: {
-                players: firebaseData.players || state.players,
-                teams: firebaseData.teams || state.teams,
-                history: firebaseData.history || state.history,
-                livePlayerId: firebaseData.livePlayerId || state.livePlayerId,
-              },
-            });
-            console.log("✅ Dispatched SET_STATE action");
+            // Only use the data that Firebase actually sent (don't fall back to captured state)
+            const payload = {};
+            if (firebaseData.players !== undefined) payload.players = firebaseData.players;
+            if (firebaseData.teams !== undefined) payload.teams = firebaseData.teams;
+            if (firebaseData.teamCredentials !== undefined) payload.teamCredentials = firebaseData.teamCredentials;
+            if (firebaseData.history !== undefined) payload.history = firebaseData.history;
+            if (firebaseData.livePlayerId !== undefined) payload.livePlayerId = firebaseData.livePlayerId;
+            
+            dispatch({ type: "SET_STATE", payload });
+            console.log("✅ Dispatched SET_STATE with Firebase data:", payload);
           }
         });
         
@@ -386,6 +417,7 @@ function AuctionProvider({ children }) {
     // Always save to localStorage as fallback
     localStorage.setItem("cm_players",    JSON.stringify(state.players));
     localStorage.setItem("cm_teams",      JSON.stringify(state.teams));
+    localStorage.setItem("cm_teamCreds",  JSON.stringify(state.teamCredentials));
     localStorage.setItem("cm_history",    JSON.stringify(state.history));
     localStorage.setItem("cm_livePlayer", JSON.stringify(state.livePlayerId));
 
@@ -394,6 +426,7 @@ function AuctionProvider({ children }) {
       updateAuctionData({
         players: state.players,
         teams: state.teams,
+        teamCredentials: state.teamCredentials,
         history: state.history,
         livePlayerId: state.livePlayerId,
       }).catch(error => {
@@ -404,7 +437,7 @@ function AuctionProvider({ children }) {
       // Reset the flag immediately for next change (doesn't trigger another effect run since it's a ref)
       isRemoteUpdateRef.current = false;
     }
-  }, [state.players, state.teams, state.history, state.livePlayerId, isFirebaseReady]);
+  }, [state.players, state.teams, state.teamCredentials, state.history, state.livePlayerId, isFirebaseReady]);
 
   return (
     <AuctionContext.Provider value={{ state, dispatch }}>
@@ -605,6 +638,7 @@ function TopBar() {
   const nav = [
     { id: "auction",   label: isAdmin ? "AUCTION (ADMIN)" : "AUCTION" },
     { id: "livebid",   label: isAdmin ? "🔴 LIVE BID" : "🔴 LIVE" },
+    { id: "display",   label: "📺 DISPLAY" },
     { id: "team",      label: "MY TEAM" },
     { id: "overview",  label: "OVERVIEW" },
     ...(isAdmin ? [
@@ -798,6 +832,215 @@ function SquadLimitsLegend() {
         }}>{SLOT_LABELS[r]} ×{lim}</span>
       ))}
       <span style={{ fontSize: 10, color: "var(--muted)", marginLeft: "auto" }}>Total: {TOTAL_SQUAD} players/team</span>
+    </div>
+  );
+}
+
+/* ─── DISPLAY PAGE (Scoreboard) ─────────────────────────────── */
+function DisplayPage() {
+  const { state } = useAuction();
+  const { players, teams, livePlayerId, currentUser } = state;
+
+  if (!currentUser) return null;
+
+  const livePlayer = players.find(p => p.id === livePlayerId);
+  const roleColor = livePlayer ? ROLE_COLORS[livePlayer.role] : "var(--accent)";
+
+  // Count players per team
+  const teamRosters = {};
+  Object.keys(teams).forEach(tName => {
+    teamRosters[tName] = {
+      total: 0,
+      BAT: 0,
+      BWL: 0,
+      WK: 0,
+      AR: 0,
+    };
+  });
+
+  players.forEach(p => {
+    if (p.soldTo) {
+      teamRosters[p.soldTo].total += 1;
+      teamRosters[p.soldTo][p.role] += 1;
+    }
+  });
+
+  return (
+    <div style={{ padding: "40px 24px", maxWidth: 1400, margin: "0 auto", minHeight: "100vh" }}>
+      {/* Main Display: Current Player */}
+      <div style={{ marginBottom: 60 }}>
+        {!livePlayer ? (
+          <div style={{
+            background: "var(--surface)", border: "2px dashed var(--border)",
+            padding: "80px 40px", textAlign: "center", borderRadius: 8,
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 20, opacity: 0.3 }}>🏏</div>
+            <div style={{ fontFamily: "Oswald", fontSize: 32, color: "var(--muted)", letterSpacing: 2 }}>
+              NO PLAYER SELECTED
+            </div>
+            <div style={{ fontSize: 16, color: "var(--muted)", marginTop: 16, letterSpacing: 1 }}>
+              Set a live player from the Live Bid page
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            background: "var(--surface)", border: `2px solid ${roleColor}`,
+            borderTop: `6px solid ${roleColor}`, padding: "60px 40px", borderRadius: 8,
+            textAlign: "center", position: "relative", overflow: "hidden",
+          }}>
+            <div style={{
+              position: "absolute", top: -60, right: -60, width: 300, height: 300,
+              borderRadius: "50%", background: roleColor + "08", pointerEvents: "none",
+            }} />
+
+            {/* Player Image */}
+            <div style={{ marginBottom: 40, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <PlayerAvatar
+                name={livePlayer.name}
+                role={livePlayer.role}
+                size={280}
+                photoUrl={livePlayer.photoUrl}
+              />
+              {livePlayer.soldTo && (
+                <div style={{
+                  position: "absolute", left: "50%", bottom: -40, transform: "translateX(-50%)",
+                  background: teams[livePlayer.soldTo]?.color,
+                  padding: "12px 32px", borderRadius: 4,
+                  fontFamily: "Oswald", fontSize: 18, fontWeight: 700,
+                  color: "#fff", letterSpacing: 2,
+                }}>
+                  ✓ {livePlayer.soldTo}
+                </div>
+              )}
+            </div>
+
+            {/* Player Name and Role */}
+            <div style={{ marginTop: 60, marginBottom: 20 }}>
+              <div style={{
+                fontFamily: "Oswald", fontSize: 56, fontWeight: 700,
+                letterSpacing: 2, lineHeight: 1, marginBottom: 16,
+              }}>
+                {livePlayer.name}
+              </div>
+
+              <div style={{ display: "flex", gap: 20, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{
+                  fontSize: 14, fontWeight: 700, letterSpacing: 2, padding: "8px 16px",
+                  background: roleColor + "22", color: roleColor, border: `2px solid ${roleColor}`,
+                  borderRadius: 4, textTransform: "uppercase",
+                }}>
+                  {ROLES[livePlayer.role]}
+                </span>
+                <span style={{
+                  fontSize: 14, color: "var(--muted)", letterSpacing: 1,
+                }}>
+                  {COUNTRY_FLAGS[livePlayer.country] || "🌍"} {livePlayer.country}
+                </span>
+              </div>
+
+              {/* Base Price */}
+              <div style={{ marginTop: 28 }}>
+                <div style={{ fontSize: 12, letterSpacing: 2, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>
+                  Base Price
+                </div>
+                <div style={{
+                  fontFamily: "Oswald", fontSize: 42, fontWeight: 700,
+                  color: "var(--green)", letterSpacing: 1,
+                }}>
+                  {livePlayer.base ? fmtCur(livePlayer.base) : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Team Rosters */}
+      <div>
+        <div style={{
+          fontFamily: "Oswald", fontSize: 24, fontWeight: 700,
+          letterSpacing: 2, marginBottom: 24, paddingBottom: 16,
+          borderBottom: "2px solid var(--border)",
+        }}>
+          TEAM SQUADS
+        </div>
+
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: 24,
+        }}>
+          {Object.entries(teams).map(([tName, tData]) => {
+            const roster = teamRosters[tName];
+            const progress = Math.round((roster.total / TOTAL_SQUAD) * 100);
+
+            return (
+              <div key={tName} style={{
+                background: "var(--surface)", border: `2px solid ${tData.color}33`,
+                borderTop: `4px solid ${tData.color}`, padding: 24, borderRadius: 8,
+              }}>
+                {/* Team Name & Color */}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 12, marginBottom: 20,
+                }}>
+                  <div style={{
+                    width: 20, height: 20, background: tData.color,
+                    borderRadius: 3,
+                  }} />
+                  <div style={{
+                    fontFamily: "Oswald", fontSize: 18, fontWeight: 700,
+                    letterSpacing: 1, color: tData.color,
+                    flex: 1,
+                  }}>
+                    {tName}
+                  </div>
+                  <div style={{
+                    fontSize: 16, fontWeight: 700, color: "var(--accent)",
+                    fontFamily: "Share Tech Mono, monospace",
+                  }}>
+                    {roster.total}/{TOTAL_SQUAD}
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div style={{
+                  height: 8, background: "var(--bg)", borderRadius: 4,
+                  overflow: "hidden", marginBottom: 20,
+                }}>
+                  <div style={{
+                    height: "100%", width: `${progress}%`, background: tData.color,
+                    transition: "width 0.3s ease",
+                  }} />
+                </div>
+
+                {/* Role Breakdown */}
+                <div style={{
+                  display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12,
+                }}>
+                  {Object.entries(SLOT_LABELS).map(([role, label]) => (
+                    <div key={role} style={{
+                      background: "var(--bg)", padding: "10px 12px", borderRadius: 4,
+                      borderLeft: `3px solid ${ROLE_COLORS[role]}`,
+                    }}>
+                      <div style={{
+                        fontSize: 11, color: "var(--muted)", letterSpacing: 1,
+                        marginBottom: 4, textTransform: "uppercase",
+                      }}>
+                        {label}
+                      </div>
+                      <div style={{
+                        fontSize: 18, fontWeight: 700, color: ROLE_COLORS[role],
+                        fontFamily: "Share Tech Mono, monospace",
+                      }}>
+                        {roster[role]}/{SLOT_LIMITS[role]}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2070,6 +2313,16 @@ function ManagePlayersPage() {
                         background: "none", border: "1px solid var(--accent)", color: "var(--accent)",
                         fontFamily: "Rajdhani", fontSize: 10, padding: "3px 8px", cursor: "pointer",
                       }}>EDIT</button>
+                      <button onClick={() => {
+                        if (window.confirm(`Delete team "${teamName}" and unassign all players?`)) {
+                          console.log(`⚠️ USER CONFIRMED DELETE for team: "${teamName}"`);
+                          dispatch({ type: "DELETE_TEAM", payload: { teamName } });
+                          toast(`✓ Team "${teamName}" deleted - syncing to Firebase`);
+                        }
+                      }} style={{
+                        background: "none", border: "1px solid var(--red)", color: "var(--red)",
+                        fontFamily: "Rajdhani", fontSize: 10, padding: "3px 8px", cursor: "pointer",
+                      }}>DEL</button>
                     </div>
                   </div>
                 )
@@ -2080,7 +2333,7 @@ function ManagePlayersPage() {
           {/* Team Credentials */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderTop: "3px solid var(--accent)", padding: 20 }}>
             <div style={{ fontFamily: "Oswald", fontSize: 14, letterSpacing: 1.5, color: "var(--accent)", marginBottom: 16 }}>🔐 LOGIN CREDENTIALS</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 300, overflowY: "auto" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 400, overflowY: "auto" }}>
               {Object.entries(USERS).map(([uname, u]) => (
                 <div key={uname} style={{
                   background: "var(--bg)", border: "1px solid var(--border)",
@@ -2094,6 +2347,22 @@ function ManagePlayersPage() {
                   </div>
                   <div style={{ color: "var(--border)", fontSize: 9 }}>
                     {u.label}
+                  </div>
+                </div>
+              ))}
+              {Object.entries(state.teamCredentials).map(([creds_name, creds]) => (
+                <div key={creds_name} style={{
+                  background: "var(--bg)", border: "1px solid var(--accent)33",
+                  padding: "10px 12px", borderRadius: "3px", fontSize: 11,
+                }}>
+                  <div style={{ color: "var(--accent)", fontWeight: 700, marginBottom: 4, fontFamily: "Share Tech Mono, monospace" }}>
+                    {creds_name.toLowerCase().replace(/\s+/g, "_")}
+                  </div>
+                  <div style={{ color: "var(--muted)", fontFamily: "Share Tech Mono, monospace", marginBottom: 2 }}>
+                    Pass: {creds.pass}
+                  </div>
+                  <div style={{ color: "var(--accent)", fontSize: 9 }}>
+                    📍 Dynamic Team
                   </div>
                 </div>
               ))}
@@ -2201,6 +2470,7 @@ function AppInner() {
   const pages = {
     auction:  AuctionPage,
     livebid:  LiveBidPage,
+    display:  DisplayPage,
     team:     TeamPage,
     overview: OverviewPage,
     history:  HistoryPage,

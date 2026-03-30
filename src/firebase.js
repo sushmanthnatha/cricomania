@@ -40,6 +40,7 @@ export async function initializeAuctionData(playersInit, teamsInit) {
       await setDoc(auctionDocRef, {
         players: playersInit,
         teams: teamsInit,
+        teamCredentials: {},
         history: [],
         livePlayerId: null,
         updatedAt: Date.now(),
