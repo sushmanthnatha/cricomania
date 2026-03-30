@@ -38,7 +38,20 @@ const TEAMS_INIT = {
 };
 
 const ROLES = { BAT: "Batsman", BWL: "Bowler", WK: "Wicketkeeper", AR: "All-Rounder" };
-const ROLE_COLORS = { BAT: "#60a5fa", BWL: "#fb7185", WK: "#4ade80", AR: "#fbbf24" };
+const ROLE_COLORS = { BAT: "#60a5fa", BWL: "#fb7185", WK: "#0891b2", AR: "#fbbf24" };
+
+// Country flag emojis
+const COUNTRY_FLAGS = {
+  "India": "🇮🇳",
+  "Australia": "🇦🇺",
+  "Pakistan": "🇵🇰",
+  "S. Africa": "🇿🇦",
+  "New Zealand": "🇳🇿",
+  "Afghanistan": "🇦🇫",
+  "England": "🇬🇧",
+  "Bangladesh": "🇧🇩",
+  "West Indies": "🇼🇮",
+};
 
 // Player photo map — Local images from public/players/ folder
 // Run: node download-player-images.js to download all player images
@@ -290,6 +303,28 @@ function reducer(state, action) {
     default:
       return state;
   }
+}
+
+/* ─── THEME CONTEXT ─────────────────────────────────────────── */
+const ThemeContext = createContext("dark");
+const useTheme = () => useContext(ThemeContext);
+
+function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem("cm_theme") || "dark";
+  });
+
+  const toggleTheme = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("cm_theme", newTheme);
+  };
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
 /* ─── CONTEXT ───────────────────────────────────────────────── */
@@ -555,16 +590,6 @@ function LoginPage() {
           cursor: "pointer", marginTop: 8,
         }}>ENTER AUCTION</button>
         {err && <div style={{ color: "var(--red)", fontSize: 12, textAlign: "center", marginTop: 12, letterSpacing: 1 }}>{err}</div>}
-
-        <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-          <div style={{ fontSize: 11, color: "var(--muted)", letterSpacing: 1, marginBottom: 8 }}>DEMO LOGINS</div>
-          {Object.entries(USERS).map(([uname, u]) => (
-            <div key={uname} style={{ fontSize: 11, fontFamily: "Share Tech Mono, monospace", color: "var(--muted)", marginBottom: 3 }}>
-              <span style={{ color: "var(--accent)" }}>{uname}</span> / {u.pass}
-              <span style={{ marginLeft: 8, color: "var(--border)", fontSize: 10 }}>({u.label})</span>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -573,6 +598,7 @@ function LoginPage() {
 /* ─── TOPBAR ────────────────────────────────────────────────── */
 function TopBar() {
   const { state, dispatch } = useAuction();
+  const { theme, toggleTheme } = useTheme();
   const { currentUser, page } = state;
   const isAdmin = currentUser?.role === "admin";
 
@@ -611,6 +637,13 @@ function TopBar() {
           {currentUser?.team && <span style={{ color: "var(--accent)", fontWeight: 700 }}>{currentUser.team}</span>}
           {!currentUser?.team && <>Logged in as <span style={{ color: "var(--accent)", fontWeight: 700 }}>{currentUser?.label}</span></>}
         </div>
+        <button onClick={toggleTheme} style={{
+          background: "none", border: "1px solid var(--border)", color: "var(--muted)",
+          fontFamily: "Rajdhani, sans-serif", fontSize: 12, letterSpacing: 1, padding: "4px 10px", cursor: "pointer",
+          transition: "all .2s",
+        }} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+          {theme === 'dark' ? '☀️ LIGHT' : '🌙 DARK'}
+        </button>
         <button onClick={() => dispatch({ type: "LOGOUT" })} style={{
           background: "none", border: "1px solid var(--border)", color: "var(--muted)",
           fontFamily: "Rajdhani, sans-serif", fontSize: 12, letterSpacing: 1, padding: "4px 10px", cursor: "pointer",
@@ -656,26 +689,29 @@ function PlayerCard({ player }) {
     <div style={{
       background: "var(--surface)", border: "1px solid var(--border)",
       borderLeft: `3px solid ${ROLE_COLORS[player.role]}`,
-      padding: 16, transition: "border-color .2s, transform .15s",
+      padding: 12, transition: "border-color .2s, transform .15s",
       opacity: isSold ? 0.65 : 1,
       position: "relative", overflow: "hidden",
+      display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
     }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
-        <PlayerAvatar name={player.name} role={player.role} size={52} photoUrl={player.photoUrl} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
-            <div style={{ fontFamily: "Oswald", fontSize: 16, fontWeight: 600, lineHeight: 1.2 }}>{player.name}</div>
-            <span style={{
-              fontSize: 9, fontWeight: 700, letterSpacing: 1.5, padding: "3px 6px", whiteSpace: "nowrap",
-              background: ROLE_COLORS[player.role] + "22", color: ROLE_COLORS[player.role],
-              border: `1px solid ${ROLE_COLORS[player.role]}44`,
-            }}>{ROLES[player.role]}</span>
-          </div>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{player.country}</div>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-            Base: <span style={{ color: "var(--green)", fontFamily: "Share Tech Mono, monospace" }}>{fmtCur(player.base)}</span>
-          </div>
-        </div>
+      {/* LARGE PLAYER IMAGE */}
+      <PlayerAvatar name={player.name} role={player.role} size={120} photoUrl={player.photoUrl} />
+      
+      {/* PLAYER NAME & ROLE */}
+      <div style={{ marginTop: 12, width: "100%" }}>
+        <div style={{ fontFamily: "Oswald", fontSize: 18, fontWeight: 700, lineHeight: 1.2 }}>{player.name}</div>
+        <span style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: 1.5, padding: "4px 8px", display: "inline-block", marginTop: 4,
+          background: ROLE_COLORS[player.role] + "22", color: ROLE_COLORS[player.role],
+          border: `1px solid ${ROLE_COLORS[player.role]}44`,
+          borderRadius: 3,
+        }}>{ROLES[player.role]}</span>
+        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>{COUNTRY_FLAGS[player.country] || "🌍"} {player.country}</div>
+      </div>
+
+      {/* PLAYER STATS */}
+      <div style={{ marginTop: 10, width: "100%", fontSize: 11, color: "var(--muted)", lineHeight: 1.6 }}>
+        <div style={{ color: "var(--green)", fontFamily: "Share Tech Mono, monospace", fontWeight: 600 }}>Base: {fmtCur(player.base)}</div>
       </div>
 
       {isSold && (
@@ -1271,9 +1307,50 @@ function LiveBidPage() {
             transform: pulse ? "scale(1.005)" : "scale(1)", transition: "transform .3s",
           }}>
             <div style={{ position: "absolute", top: -40, right: -40, width: 220, height: 220, borderRadius: "50%", background: roleColor + "08", pointerEvents: "none" }} />
-            <div style={{ display: "flex", gap: 28, alignItems: "flex-start", position: "relative" }}>
-              <div style={{ position: "relative" }}>
-                <PlayerAvatar name={player.name} role={player.role} size={110} photoUrl={player.photoUrl} />
+            <div style={{ display: "flex", gap: 32, alignItems: "flex-start", position: "relative" }}>
+              <div style={{ position: "relative", flex: "0 0 auto" }}>
+                <PlayerAvatar name={player.name} role={player.role} size={260} photoUrl={player.photoUrl} />
+                {isSold && (
+                  <>
+                    <style>{`
+                      @keyframes ribbonFly {
+                        0% { opacity: 1; transform: translateY(-100px) translateX(0) rotate(0deg); }
+                        50% { opacity: 1; transform: translateY(-20px) translateX(80px) rotate(45deg); }
+                        100% { opacity: 0; transform: translateY(80px) translateX(-100px) rotate(-45deg); }
+                      }
+                      @keyframes ribbonFly2 {
+                        0% { opacity: 1; transform: translateY(-80px) translateX(0) rotate(30deg); }
+                        50% { opacity: 1; transform: translateY(0) translateX(-70px) rotate(-20deg); }
+                        100% { opacity: 0; transform: translateY(100px) translateX(60px) rotate(45deg); }
+                      }
+                      @keyframes ribbonFly3 {
+                        0% { opacity: 1; transform: translateY(0) translateX(-100px) rotate(-45deg); }
+                        50% { opacity: 1; transform: translateY(-40px) translateX(50px) rotate(20deg); }
+                        100% { opacity: 0; transform: translateY(120px) translateX(-40px) rotate(60deg); }
+                      }
+                    `}</style>
+                    <div style={{
+                      position: "absolute", top: "50%", left: "50%", width: 300, height: 300,
+                      transform: "translate(-50%, -50%)", pointerEvents: "none",
+                    }}>
+                      <div style={{
+                        position: "absolute", width: 40, height: 120, background: "linear-gradient(135deg, #f5c518, #fbbf24)",
+                        borderRadius: "50% 50%", opacity: 0.9, animation: "ribbonFly 2s ease-out infinite",
+                        boxShadow: "0 4px 12px rgba(245, 197, 24, 0.4)",
+                      }} />
+                      <div style={{
+                        position: "absolute", width: 35, height: 110, background: "linear-gradient(135deg, #fb7185, #ff6b9d)",
+                        borderRadius: "50% 50%", opacity: 0.85, animation: "ribbonFly2 2.4s ease-out infinite 0.3s",
+                        boxShadow: "0 4px 12px rgba(251, 113, 133, 0.4)",
+                      }} />
+                      <div style={{
+                        position: "absolute", width: 38, height: 115, background: "linear-gradient(135deg, #60a5fa, #3b82f6)",
+                        borderRadius: "50% 50%", opacity: 0.88, animation: "ribbonFly3 2.2s ease-out infinite 0.6s",
+                        boxShadow: "0 4px 12px rgba(96, 165, 250, 0.4)",
+                      }} />
+                    </div>
+                  </>
+                )}
                 <span style={{
                   position: "absolute", bottom: -6, left: "50%", transform: "translateX(-50%)",
                   fontSize: 9, fontWeight: 700, letterSpacing: 1.5, padding: "2px 8px",
@@ -1284,7 +1361,7 @@ function LiveBidPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: "Oswald", fontSize: 38, fontWeight: 700, letterSpacing: 1, lineHeight: 1, marginBottom: 8 }}>{player.name}</div>
                 <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
-                  <span style={{ fontSize: 14, color: "var(--muted)", letterSpacing: 1 }}>🌍 {player.country}</span>
+                  <span style={{ fontSize: 14, color: "var(--muted)", letterSpacing: 1 }}>{COUNTRY_FLAGS[player.country] || "🌍"} {player.country}</span>
                   <span style={{ fontSize: 14, color: "var(--muted)", letterSpacing: 1 }}>
                     Base: <span style={{ color: "var(--green)", fontFamily: "Share Tech Mono, monospace", fontSize: 15 }}>{fmtCur(player.base)}</span>
                   </span>
@@ -1887,16 +1964,21 @@ function ManagePlayersPage() {
               />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>Team Color (Hex)</div>
-              <input
-                type="text" value={newTeamColor} onChange={e => setNewTeamColor(e.target.value)}
-                placeholder="#3b9eff"
-                style={{
-                  width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                  color: "var(--text)", fontFamily: "Share Tech Mono, monospace", fontSize: 14,
-                  padding: "9px 12px", outline: "none",
-                }}
-              />
+              <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>Team Color</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="color" value={newTeamColor} onChange={e => setNewTeamColor(e.target.value)}
+                  style={{
+                    width: 50, height: 50, border: "2px solid var(--border)", cursor: "pointer",
+                    borderRadius: 4,
+                  }}
+                />
+                <div style={{
+                  background: newTeamColor, width: 50, height: 50, borderRadius: 4,
+                  border: "2px solid var(--border)"
+                }} title={newTeamColor}></div>
+                <span style={{ fontSize: 12, fontFamily: "Share Tech Mono", color: "var(--muted)" }}>{newTeamColor}</span>
+              </div>
             </div>
             <button onClick={addTeam} style={{
               width: "100%", background: "var(--accent)", color: "#000", border: "none",
@@ -1923,10 +2005,9 @@ function ManagePlayersPage() {
                       }}
                     />
                     <input
-                      type="text" value={editTeamForm.color} onChange={e => setEditTeamForm(f => ({ ...f, color: e.target.value }))}
+                      type="color" value={editTeamForm.color} onChange={e => setEditTeamForm(f => ({ ...f, color: e.target.value }))}
                       style={{
-                        background: "rgba(0,0,0,0.2)", border: "1px solid rgba(0,0,0,0.3)", color: "#000",
-                        padding: "6px 10px", fontFamily: "Share Tech Mono, monospace", fontSize: 11, outline: "none",
+                        width: "100%", height: 40, border: "2px solid rgba(0,0,0,0.3)", borderRadius: 3, cursor: "pointer",
                       }}
                     />
                     <div style={{ display: "flex", gap: 6 }}>
@@ -2068,32 +2149,47 @@ function ManagePlayersPage() {
     </div>
   );
 }
-const GlobalStyles = () => (
-  <style>{`
-    :root {
-      --bg: #0a0c0f; --surface: #111418; --surface2: #181c22;
-      --border: #2a2f38; --accent: #f5c518; --green: #22c55e;
-      --red: #ef4444; --blue: #3b82f6; --text: #e8eaf0; --muted: #6b7280;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: var(--bg); color: var(--text); font-family: Rajdhani, sans-serif; min-height: 100vh; overflow-x: hidden; }
-    body::before {
-      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-      background-image:
-        repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(245,197,24,.025) 40px, rgba(245,197,24,.025) 41px),
-        repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(245,197,24,.025) 40px, rgba(245,197,24,.025) 41px);
-    }
-    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
-    select option { background: #0a0c0f; }
-    @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-    button { transition: all .2s; }
-    button:hover { opacity: .88; }
-    button:active { transform: scale(.97); }
-  `}</style>
-);
+const GlobalStyles = () => {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+  
+  const darkVars = `
+    --bg: #0a0c0f; --surface: #111418; --surface2: #181c22;
+    --border: #2a2f38; --accent: #f5c518; --green: #22c55e;
+    --red: #ef4444; --blue: #3b82f6; --text: #e8eaf0; --muted: #6b7280;
+  `;
+  
+  const lightVars = `
+    --bg: #f8f9fa; --surface: #ffffff; --surface2: #f1f3f5;
+    --border: #d1d5db; --accent: #f59e0b; --green: #10b981;
+    --red: #ef4444; --blue: #3b82f6; --text: #1f2937; --muted: #9ca3af;
+  `;
+  
+  return (
+    <style>{`
+      :root {
+        ${isDark ? darkVars : lightVars}
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: var(--bg); color: var(--text); font-family: Rajdhani, sans-serif; min-height: 100vh; overflow-x: hidden; transition: background 0.3s, color 0.3s; }
+      body::before {
+        content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+        background-image:
+          repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(245,197,24,.025) 40px, rgba(245,197,24,.025) 41px),
+          repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(245,197,24,.025) 40px, rgba(245,197,24,.025) 41px);
+      }
+      input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+      select option { background: var(--bg); color: var(--text); }
+      @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: var(--bg); }
+      ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+      button { transition: all .2s; }
+      button:hover { opacity: .88; }
+      button:active { transform: scale(.97); }
+    `}</style>
+  );
+};
 
 /* ─── APP ROOT ──────────────────────────────────────────────── */
 function AppInner() {
@@ -2124,12 +2220,14 @@ export default function App() {
   return (
     <>
       <FontLoader />
-      <GlobalStyles />
-      <AuctionProvider>
-        <ToastProvider>
-          <AppInner />
-        </ToastProvider>
-      </AuctionProvider>
+      <ThemeProvider>
+        <GlobalStyles />
+        <AuctionProvider>
+          <ToastProvider>
+            <AppInner />
+          </ToastProvider>
+        </AuctionProvider>
+      </ThemeProvider>
     </>
   );
 }
