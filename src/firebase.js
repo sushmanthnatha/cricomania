@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
 import { getAuth, signInAnonymously, setPersistence, browserLocalPersistence } from "firebase/auth";
 
 // ============================================================

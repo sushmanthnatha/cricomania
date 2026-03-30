@@ -301,6 +301,7 @@ function AuctionProvider({ children }) {
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
 
   // Initialize Firebase and sign in user
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const initFirebase = async () => {
       try {
@@ -1128,7 +1129,7 @@ function LiveBidPage() {
     setPulse(true);
     const t = setTimeout(() => setPulse(false), 600);
     return () => clearTimeout(t);
-  }, [livePlayerId]);
+  }, [livePlayerId, player]);
 
   const assign = () => {
     const price = parseCr(bidVal) || player.base;
@@ -1507,7 +1508,6 @@ function ManagePlayersPage() {
   const [confirmDel, setConfirmDel] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [showTeamMgmt, setShowTeamMgmt] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamColor, setNewTeamColor] = useState("#3b9eff");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -1518,10 +1518,6 @@ function ManagePlayersPage() {
   const [fundAmount, setFundAmount] = useState("");
 
   const upd = (k, v) => { setForm(f => ({ ...f, [k]: v })); if (k === "photoUrl") setPhotoPreviewErr(false); };
-
-  const randomiseStats = () => {
-    toast("Stats will be auto-generated on player addition!");
-  };
 
   const addPlayer = () => {
     if (!form.name.trim()) { toast("Player name required!", true); return; }
@@ -1605,17 +1601,6 @@ function ManagePlayersPage() {
     });
     toast(`✅ Team updated!`);
     setEditingTeam(null);
-  };
-
-  const deleteTeam = (teamName) => {
-    const hasPlayers = players.some(p => p.soldTo === teamName);
-    if (hasPlayers) {
-      toast("Cannot delete team with assigned players!", true); return;
-    }
-    const teams = { ...state.teams };
-    delete teams[teamName];
-    dispatch({ type: "SET_STATE", payload: { teams } });
-    toast(`${teamName} deleted!`);
   };
 
   const addFundsToTeam = (teamName) => {

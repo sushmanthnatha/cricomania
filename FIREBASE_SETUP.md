@@ -120,9 +120,13 @@ npm start  # Runs on http://localhost:3001
 2. Login as **Admin** in Tab 1
 3. Login as **Team Manager** in Tab 2
 4. In Tab 1: Sell a player
-5. In Tab 2: Refresh (or watch real-time update) ✅
+5. In Tab 2: **WATCH WITHOUT REFRESHING** - you should see the change instantly ✅
 
-If both tabs see the same data in real-time → **Firebase working!**
+**Expected Results:**
+- ✅ **Real-time working**: Tab 2 updates instantly (no refresh needed)
+- ❌ **Not working**: Tab 2 doesn't update until you refresh → Check Firestore Rules are published
+
+If Tab 2 updates instantly → **Firebase real-time sync working!**
 
 ---
 
