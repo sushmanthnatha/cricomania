@@ -8,6 +8,7 @@ import {
   initializeAuctionData, 
   subscribeToAuction, 
   updateAuctionData,
+  syncConfigToFirebase,
   signInUser 
 } from "./firebase";
 
@@ -17,29 +18,39 @@ const FontLoader = () => (
 );
 
 /* ─── CONSTANTS ─────────────────────────────────────────────── */
-const BUDGET = 10_00_00_000; // 10 Crore
+const BUDGET = 7000_00_000; // 70 Crores
 
 // ── TEAM SLOT LIMITS ──────────────────────────────────────────
-const SLOT_LIMITS = { BAT: 4, BWL: 4, WK: 1, AR: 2 };
-const SLOT_LABELS = { BAT: "Batsmen", BWL: "Bowlers", WK: "Wicket-keeper", AR: "All-Rounders" };
-const TOTAL_SQUAD = Object.values(SLOT_LIMITS).reduce((a, b) => a + b, 0); // 11
+const SLOT_LIMITS = { BAT: 2, BWL: 2, WK: 1, AR: 1, LEG: 1 };
+const SLOT_LABELS = { BAT: "Batsmen", BWL: "Bowlers", WK: "Wicket-keeper", AR: "All-Rounders", LEG: "Legends" };
+const TOTAL_SQUAD = Object.values(SLOT_LIMITS).reduce((a, b) => a + b, 0); // 8
 
 const USERS = {
-  admin:     { pass: "admin123",   role: "admin", team: null,                      label: "ADMIN" },
-  mi_mgr:    { pass: "mi2024",     role: "team",  team: "MUMBAI INDIANS",         label: "MUMBAI INDIANS" },
-  csk_mgr:   { pass: "csk2024",    role: "team",  team: "CHENNAI SUPER KINGS",   label: "CHENNAI SUPER KINGS" },
-  rcb_mgr:   { pass: "rcb2024",    role: "team",  team: "ROYAL CHALLENGERS",     label: "ROYAL CHALLENGERS" },
-  bidder:    { pass: "bidder123",  role: "user",  team: null,                      label: "BIDDER / VIEWER" },
+  admin:     { pass: "admin123",   role: "admin", team: null,                          label: "ADMIN" },
+  csk_mgr:   { pass: "csk2024",    role: "team",  team: "CHENNAI SUPER KINGS",       label: "CHENNAI SUPER KINGS" },
+  dc_mgr:    { pass: "dc2024",     role: "team",  team: "DELHI CAPITALS",            label: "DELHI CAPITALS" },
+  kkr_mgr:   { pass: "kkr2024",    role: "team",  team: "KOLKATA KNIGHT RIDERS",    label: "KOLKATA KNIGHT RIDERS" },
+  mi_mgr:    { pass: "mi2024",     role: "team",  team: "MUMBAI INDIANS",             label: "MUMBAI INDIANS" },
+  pbks_mgr:  { pass: "pbks2024",   role: "team",  team: "PUNJAB KINGS",             label: "PUNJAB KINGS" },
+  rr_mgr:    { pass: "rr2024",     role: "team",  team: "RAJASTHAN ROYALS",         label: "RAJASTHAN ROYALS" },
+  rcb_mgr:   { pass: "rcb2024",    role: "team",  team: "ROYAL CHALLENGERS BENGALURU", label: "ROYAL CHALLENGERS BENGALURU" },
+  srh_mgr:   { pass: "srh2024",    role: "team",  team: "SUNRISERS HYDERABAD",      label: "SUNRISERS HYDERABAD" },
+  bidder:    { pass: "bidder123",  role: "user",  team: null,                          label: "BIDDER / VIEWER" },
 };
 
 const TEAMS_INIT = {
-  "MUMBAI INDIANS":       { budget: BUDGET, spent: 0, color: "#004687" },
-  "CHENNAI SUPER KINGS":  { budget: BUDGET, spent: 0, color: "#ffc32f" },
-  "ROYAL CHALLENGERS":    { budget: BUDGET, spent: 0, color: "#ec1c24" },
+  "CHENNAI SUPER KINGS":         { budget: BUDGET, spent: 0, color: "#ffc32f" },
+  "DELHI CAPITALS":              { budget: BUDGET, spent: 0, color: "#00d4ff" },
+  "KOLKATA KNIGHT RIDERS":       { budget: BUDGET, spent: 0, color: "#d946ef" },
+  "MUMBAI INDIANS":              { budget: BUDGET, spent: 0, color: "#004687" },
+  "PUNJAB KINGS":                { budget: BUDGET, spent: 0, color: "#c41e3a" },
+  "RAJASTHAN ROYALS":            { budget: BUDGET, spent: 0, color: "#ec407a" },
+  "ROYAL CHALLENGERS BENGALURU": { budget: BUDGET, spent: 0, color: "#ec1c24" },
+  "SUNRISERS HYDERABAD":         { budget: BUDGET, spent: 0, color: "#ff7f00" },
 };
 
-const ROLES = { BAT: "Batsman", BWL: "Bowler", WK: "Wicketkeeper", AR: "All-Rounder" };
-const ROLE_COLORS = { BAT: "#60a5fa", BWL: "#fb7185", WK: "#0891b2", AR: "#fbbf24" };
+const ROLES = { BAT: "Batsman", BWL: "Bowler", WK: "Wicketkeeper", AR: "All-Rounder", LEG: "Legend" };
+const ROLE_COLORS = { BAT: "#60a5fa", BWL: "#fb7185", WK: "#0891b2", AR: "#fbbf24", LEG: "#a855f7" };
 
 // Country flag emojis
 const COUNTRY_FLAGS = {
@@ -55,84 +66,172 @@ const COUNTRY_FLAGS = {
 };
 
 // Player photo map — Local images from public/players/ folder
-// Run: node download-player-images.js to download all player images
+// IMPORTANT: Only add entries for images that actually exist in public/players/
+// Add new images to public/players/ folder and they'll auto-display
 const PLAYER_PHOTOS = {
-  "Rohit Sharma":      "/players/rohit_sharma.png",
-  "David Warner":      "/players/david_warner.jpg",
-  "Babar Azam":        "/players/babar_azam.jpg",
-  "Faf du Plessis":    "/players/faf_du_plessis.jpg",
-  "KL Rahul":          "/players/kl_rahul.jpg",
-  "Kane Williamson":   "/players/kane_williamson.jpg",
-  "Travis Head":       "/players/travis_head.jpg",
-  "Jasprit Bumrah":    "/players/jasprit_bumrah.jpg",
-  "Pat Cummins":       "/players/pat_cummins.jpg",
-  "Rashid Khan":       "/players/rashid_khan.jpg",
-  "Mitchell Starc":    "/players/mitchell_starc.jpg",
-  "Kagiso Rabada":     "/players/kagiso_rabada.jpg",
-  "Trent Boult":       "/players/trent_boult.jpg",
-  "Mohammed Shami":    "/players/mohammed_shami.jpg",
-  "Shaheen Afridi":    "/players/shaheen_afridi.jpg",
-  "MS Dhoni":          "/players/ms_dhoni.jpg",
-  "Jos Buttler":       "/players/jos_buttler.jpg",
-  "Rishabh Pant":      "/players/rishabh_pant.jpg",
-  "Heinrich Klaasen":  "/players/heinrich_klaasen.jpg",
-  "Quinton de Kock":   "/players/quinton_de_kock.jpg",
-  "Ben Stokes":        "/players/ben_stokes.jpg",
-  "Hardik Pandya":     "/players/hardik_pandya.jpg",
-  "Shakib Al Hasan":   "/players/shakib_al_hasan.jpg",
-  "Andre Russell":     "/players/andre_russell.jpg",
-  "Glenn Maxwell":     "/players/glenn_maxwell.jpg",
-  "Marcus Stoinis":    "/players/marcus_stoinis.jpg",
+  // Batsmen
+  "Ruturaj Gaikwad":     "/players/ruturaj_gaikwad.avif",
+  "Yashasvi Jaiswal":    "/players/yashasvi_jaiswal.avif",
+  "Abhishek Sharma":     "/players/abhishek_sharma.avif",
+  "Shreyas Iyer":        "/players/shreyas_iyer.avif",
+  "Phil Salt":           "/players/phil_salt.avif",
+  "Suryakumar Yadav":    "/players/suryakumar_yadav.avif",
+  "Shubman Gill":        "/players/shubman_gill.avif",
+  "Ellyse Perry":        "/players/ellyse_perry.webp",
+  "Smriti Mandhana":     "/players/smriti_mandhana.avif",
+  "David Miller":        "/players/david_miller.avif",
+  "Virat Kohli":         "/players/virat_kohli.avif",
+  "Travis Head":         "/players/travis_head.avif",
+  "Harmanpreet Kaur":    "/players/harmanpreet_kaur.webp",
+  "David Warner":        "/players/david_warner.avif",
+  "Rohit Sharma":        "/players/rohit_sharma.png",
+  "Rinku Singh":         "/players/rinku_singh.avif",
+  "Faf Du Plessis":      "/players/faf_du_plessis.avif",
+  "Tilak Varma":         "/players/tilak_verma.avif",
+  // Bowlers
+  "Kagiso Rabada":       "/players/kagiso_rabada.avif",
+  "Sarah Glenn":         "/players/sarah_glenn.jpeg",
+  "Mohammed Shami":      "/players/mohammed _shami.avif",
+  "Kuldeep Yadav":       "/players/kuldeep_yadav.avif",
+  "Bhuvneshwar Kumar":   "/players/bhuvneshwar_kumar.avif",
+  "Yuzvendra Chahal":    "/players/yuzvendra_chahal.avif",
+  "Josh Hazlewood":      "/players/josh_hazlewood.avif",
+  "Trent Boult":         "/players/trent_boult.avif",
+  "Rashid Khan":         "/players/rashid_khan.avif",
+  "Sophie Ecclestone":   "/players/sophie_ecclestone.webp",
+  "Mitchell Starc":      "/players/mitchell_starc.avif",
+  "Mohammad Siraj":      "/players/mohammad_siraj.avif",
+  "Lasith Malinga":      "/players/lasith_malinga.avif",
+  "Jofra Archer":        "/players/jofra_archer.avif",
+  "Sunil Narine":        "/players/sunil_narine.avif",
+  "Pat Cummins":         "/players/pat_cummins.avif",
+  "Varun Chakravarthy":  "/players/varun_chakravarthy.webp",
+  "Jasprit Bumrah":      "/players/jasprit_bumrah .avif",
+  // Wicket-keepers
+  "Quinton de Kock":     "/players/quinton_de_kock.avif",
+  "Sanju Samson":        "/players/sanju_samson.avif",
+  "MS Dhoni":            "/players/ms_dhoni.avif",
+  "KL Rahul":            "/players/kl_rahul.avif",
+  "Jos Buttler":         "/players/jos_buttler.avif",
+  "Rishabh Pant":        "/players/rishabh_pant.avif",
+  // All-rounders
+  "Glenn Maxwell":       "/players/glenn_maxwell.avif",
+  "Andre Russell":       "/players/andre_russell.avif",
+  "Ravindra Jadeja":     "/players/ravindra_jadeja.avif",
+  "Hardik Pandya":       "/players/hardik_pandya.avif",
+  // Legends
+  "Ricky Ponting":       "/players/ricky_ponting.png",
+  "Sachin Tendulkar":    "/players/sachin_tendulkar.png",
+  "Chris Gayle":         "/players/chris_gayle.avif",
+  "AB de Villiers":      "/players/ab_de_villiers.avif",
 };
+
+// CONFIG VERSION — increment this when PLAYER_PHOTOS or data structure changes
+// When version changes, old localStorage data is automatically cleared
+const CONFIG_VERSION = "v3.0"; // Updated: Redesigned Budget Management with card-based UI showing all teams
 
 const PLAYERS_INIT = [
-  { id:1,  name:"Rohit Sharma",    role:"BAT", country:"India",       base:50000000 },
-  { id:2,  name:"David Warner",    role:"BAT", country:"Australia",   base:40000000 },
-  { id:3,  name:"Babar Azam",      role:"BAT", country:"Pakistan",    base:45000000 },
-  { id:4,  name:"Faf du Plessis",  role:"BAT", country:"S. Africa",   base:35000000 },
-  { id:5,  name:"KL Rahul",        role:"BAT", country:"India",       base:40000000 },
-  { id:6,  name:"Kane Williamson", role:"BAT", country:"New Zealand", base:35000000 },
-  { id:7,  name:"Travis Head",     role:"BAT", country:"Australia",   base:30000000 },
-  { id:8,  name:"Jasprit Bumrah",  role:"BWL", country:"India",       base:60000000 },
-  { id:9,  name:"Pat Cummins",     role:"BWL", country:"Australia",   base:55000000 },
-  { id:10, name:"Rashid Khan",     role:"BWL", country:"Afghanistan", base:50000000 },
-  { id:11, name:"Mitchell Starc",  role:"BWL", country:"Australia",   base:45000000 },
-  { id:12, name:"Kagiso Rabada",   role:"BWL", country:"S. Africa",   base:40000000 },
-  { id:13, name:"Trent Boult",     role:"BWL", country:"New Zealand", base:35000000 },
-  { id:14, name:"Mohammed Shami",  role:"BWL", country:"India",       base:40000000 },
-  { id:15, name:"Shaheen Afridi",  role:"BWL", country:"Pakistan",    base:35000000 },
-  { id:16, name:"MS Dhoni",        role:"WK",  country:"India",       base:60000000 },
-  { id:17, name:"Jos Buttler",     role:"WK",  country:"England",     base:50000000 },
-  { id:18, name:"Rishabh Pant",    role:"WK",  country:"India",       base:50000000 },
-  { id:19, name:"Heinrich Klaasen",role:"WK",  country:"S. Africa",   base:30000000 },
-  { id:20, name:"Quinton de Kock", role:"WK",  country:"S. Africa",   base:32000000 },
-  { id:21, name:"Ben Stokes",      role:"AR",  country:"England",     base:55000000 },
-  { id:22, name:"Hardik Pandya",   role:"AR",  country:"India",       base:50000000 },
-  { id:23, name:"Shakib Al Hasan", role:"AR",  country:"Bangladesh",  base:30000000 },
-  { id:24, name:"Andre Russell",   role:"AR",  country:"West Indies", base:45000000 },
-  { id:25, name:"Glenn Maxwell",   role:"AR",  country:"Australia",   base:40000000 },
-  { id:26, name:"Marcus Stoinis",  role:"AR",  country:"Australia",   base:25000000 },
+  // Batsmen (18 players) — base 1 Crore each
+  { id:1,  name:"Ruturaj Gaikwad",    role:"BAT", country:"India",           base:100_00_000, t20Rating: 600 },
+  { id:2,  name:"Yashasvi Jaiswal",   role:"BAT", country:"India",           base:100_00_000, t20Rating: 769 },
+  { id:3,  name:"Abhishek Sharma",    role:"BAT", country:"India",           base:100_00_000, t20Rating: 890 },
+  { id:4,  name:"Shreyas Iyer",       role:"BAT", country:"India",           base:100_00_000, t20Rating: 789 },
+  { id:5,  name:"Phil Salt",          role:"BAT", country:"England",         base:100_00_000, t20Rating: 702 },
+  { id:6,  name:"Suryakumar Yadav",   role:"BAT", country:"India",           base:100_00_000, t20Rating: 870 },
+  { id:7,  name:"Shubman Gill",       role:"BAT", country:"India",           base:100_00_000, t20Rating: 673 },
+  { id:8,  name:"Ellyse Perry",       role:"BAT", country:"Australia",       base:100_00_000, t20Rating: 890 },
+  { id:9,  name:"Smriti Mandhana",    role:"BAT", country:"India",           base:100_00_000, t20Rating: 741 },
+  { id:10, name:"David Miller",       role:"BAT", country:"South Africa",    base:100_00_000, t20Rating: 779 },
+  { id:11, name:"Virat Kohli",        role:"BAT", country:"India",           base:100_00_000, t20Rating: 900 },
+  { id:12, name:"Travis Head",        role:"BAT", country:"Australia",       base:100_00_000, t20Rating: 847 },
+  { id:13, name:"Harmanpreet Kaur",   role:"BAT", country:"India",           base:100_00_000, t20Rating: 710 },
+  { id:14, name:"David Warner",       role:"BAT", country:"Australia",       base:100_00_000, t20Rating: 826 },
+  { id:15, name:"Rohit Sharma",       role:"BAT", country:"India",           base:100_00_000, t20Rating: 878 },
+  { id:16, name:"Rinku Singh",        role:"BAT", country:"India",           base:100_00_000, t20Rating: 446 },
+  { id:17, name:"Faf Du Plessis",     role:"BAT", country:"South Africa",    base:100_00_000, t20Rating: 843 },
+  { id:18, name:"Tilak Varma",        role:"BAT", country:"India",           base:100_00_000, t20Rating: 709 },
+  // Bowlers (18 players) — base 1 Crore each
+  { id:19, name:"Kagiso Rabada",      role:"BWL", country:"South Africa",    base:100_00_000, t20Rating: 795 },
+  { id:20, name:"Sarah Glenn",        role:"BWL", country:"England",         base:100_00_000, t20Rating: 661 },
+  { id:21, name:"Mohammed Shami",     role:"BWL", country:"India",           base:100_00_000, t20Rating: 724 },
+  { id:22, name:"Kuldeep Yadav",      role:"BWL", country:"India",           base:100_00_000, t20Rating: 678 },
+  { id:23, name:"Bhuvneshwar Kumar",  role:"BWL", country:"India",           base:100_00_000, t20Rating: 782 },
+  { id:24, name:"Yuzvendra Chahal",   role:"BWL", country:"India",           base:100_00_000, t20Rating: 706 },
+  { id:25, name:"Josh Hazlewood",     role:"BWL", country:"Australia",       base:100_00_000, t20Rating: 764 },
+  { id:26, name:"Trent Boult",        role:"BWL", country:"New Zealand",     base:100_00_000, t20Rating: 653 },
+  { id:27, name:"Rashid Khan",        role:"BWL", country:"Afghanistan",     base:100_00_000, t20Rating: 816 },
+  { id:28, name:"Sophie Ecclestone",  role:"BWL", country:"England",         base:100_00_000, t20Rating: 851 },
+  { id:29, name:"Mitchell Starc",     role:"BWL", country:"Australia",       base:100_00_000, t20Rating: 702 },
+  { id:30, name:"Mohammad Siraj",     role:"BWL", country:"India",           base:100_00_000, t20Rating: 614 },
+  { id:31, name:"Lasith Malinga",     role:"BWL", country:"Sri Lanka",       base:100_00_000, t20Rating: 880 },
+  { id:32, name:"Jofra Archer",       role:"BWL", country:"England",         base:100_00_000, t20Rating: 870 },
+  { id:33, name:"Sunil Narine",       role:"BWL", country:"West Indies",     base:100_00_000, t20Rating: 820 },
+  { id:34, name:"Pat Cummins",        role:"BWL", country:"Australia",       base:100_00_000, t20Rating: 790 },
+  { id:35, name:"Varun Chakravarthy", role:"BWL", country:"India",           base:100_00_000, t20Rating: 800 },
+  { id:36, name:"Jasprit Bumrah",     role:"BWL", country:"India",           base:100_00_000, t20Rating: 900 },
+  // Wicket-keepers (6 players) — base 75 Lakhs (0.75 Crore) each
+  { id:37, name:"Quinton de Kock",    role:"WK",  country:"South Africa",    base:75_00_000, t20Rating: 771 },
+  { id:38, name:"Sanju Samson",       role:"WK",  country:"India",           base:75_00_000, t20Rating: 743 },
+  { id:39, name:"MS Dhoni",           role:"WK",  country:"India",           base:75_00_000, t20Rating: 825 },
+  { id:40, name:"KL Rahul",           role:"WK",  country:"India",           base:75_00_000, t20Rating: 715 },
+  { id:41, name:"Jos Buttler",        role:"WK",  country:"England",         base:75_00_000, t20Rating: 734 },
+  { id:42, name:"Rishabh Pant",       role:"WK",  country:"India",           base:75_00_000, t20Rating: 569 },
+  // All-rounders (4 players) — base 75 Lakhs (0.75 Crore) each
+  { id:43, name:"Glenn Maxwell",      role:"AR",  country:"Australia",       base:75_00_000, t20Rating: 836 },
+  { id:44, name:"Andre Russell",      role:"AR",  country:"West Indies",     base:75_00_000, t20Rating: 897 },
+  { id:47, name:"Ravindra Jadeja",    role:"AR",  country:"India",           base:75_00_000, t20Rating: 751 },
+  { id:48, name:"Hardik Pandya",      role:"AR",  country:"India",           base:75_00_000, t20Rating: 817 },
+  // Legends (4 players) — base 75 Lakhs (0.75 Crore) each
+  { id:49, name:"Ricky Ponting",      role:"LEG", country:"Australia",       base:75_00_000, t20Rating: 900 },
+  { id:50, name:"Sachin Tendulkar",   role:"LEG", country:"India",           base:75_00_000, t20Rating: 920 },
+  { id:51, name:"Chris Gayle",        role:"LEG", country:"West Indies",     base:75_00_000, t20Rating: 870 },
+  { id:52, name:"AB de Villiers",     role:"LEG", country:"South Africa",    base:75_00_000, t20Rating: 900 },
 ].map(p => ({ ...p, soldTo: null, soldPrice: null, photoUrl: PLAYER_PHOTOS[p.name] || null }));
-
-// Currency in crores. 1 Cr = 1,00,00,000
+console.log(PLAYERS_INIT);
+// Currency formatting: >= 1 Crore shown as Crores, < 1 Crore shown as Lakhs
+// 1 Crore = 100 Lakhs = 10,000,000
+// 1 Lakh = 100,000
 const fmtCur = n => {
   if (n == null || isNaN(n)) return "₹0";
-  if (n >= 1_00_00_000) return "₹" + (n / 1_00_00_000).toFixed(2) + " Cr";
-  if (n >= 1_00_000)    return "₹" + (n / 1_00_000).toFixed(2) + " L";
-  if (n >= 1_000)       return "₹" + (n / 1_000).toFixed(0) + "K";
+  if (n >= 1_00_00_000) return "₹" + (n / 1_00_00_000).toFixed(2) + " Cr";  // >= 1 Crore (10 million)
+  if (n >= 1_00_000) return "₹" + (n / 1_00_000).toFixed(2) + " L";        // Lakhs (100k)
+  if (n >= 1_000)    return "₹" + (n / 1_000).toFixed(0) + "K";
   return "₹" + n;
 };
-// Parse crore input: accepts "1.5" → 1.5 Cr = 1,50,00,000
-const parseCr = v => {
+// Parse lakh input: accepts "1.5" → 1.5 L = 1,50,000
+const parseLakh = v => {
   const n = parseFloat(v);
-  return isNaN(n) ? 0 : Math.round(n * 1_00_00_000);
+  return isNaN(n) ? 0 : Math.round(n * 1_00_000);
 };
+
+// Parse amount: supports crores (C) and lakhs (L)
+// Examples: "5" → 5,00,00,000 (5 Crores) | "25L" → 25,00,000 | "2C" → 2,00,00,000
+const parseAmount = v => {
+  const input = (v || "").trim().toUpperCase();
+  if (!input) return 0;
+  
+  let num, multiplier;
+  if (input.endsWith("C")) {
+    num = parseFloat(input.slice(0, -1));
+    multiplier = 1_00_00_000; // 1 Crore
+  } else if (input.endsWith("L")) {
+    num = parseFloat(input.slice(0, -1));
+    multiplier = 1_00_000; // 1 Lakh
+  } else {
+    // Default to crores if no suffix
+    num = parseFloat(input);
+    multiplier = 1_00_00_000;
+  }
+  
+  return isNaN(num) ? 0 : Math.round(num * multiplier);
+};
+
 const fmtTime = ts => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 /* ─── SLOT HELPERS ──────────────────────────────────────────── */
 function getTeamSlots(players, teamName) {
   const tp = players.filter(p => p.soldTo === teamName);
-  const counts = { BAT: 0, BWL: 0, WK: 0, AR: 0 };
+  const counts = { BAT: 0, BWL: 0, WK: 0, AR: 0, LEG: 0 };
   tp.forEach(p => { counts[p.role] = (counts[p.role] || 0) + 1; });
   return counts;
 }
@@ -142,33 +241,11 @@ function canAssignRole(players, teamName, role) {
   return counts[role] < SLOT_LIMITS[role];
 }
 
-/* ─── RANDOM STAT GENERATOR ─────────────────────────────────── */
-function generateStats(role) {
-  const rnd = (lo, hi, dec = 0) => {
-    const v = lo + Math.random() * (hi - lo);
-    return dec ? parseFloat(v.toFixed(dec)) : Math.round(v);
-  };
-  if (role === "BAT") return {
-    matches: rnd(30, 150), runs: rnd(800, 5000), avg: rnd(22, 55, 1),
-    sr: rnd(115, 170, 1), wickets: null, economy: null,
-    hundreds: rnd(0, 6), fifties: rnd(5, 35), catches: rnd(10, 60),
-  };
-  if (role === "BWL") return {
-    matches: rnd(30, 130), runs: null, avg: null, sr: null,
-    wickets: rnd(40, 180), economy: rnd(6.5, 9.8, 2),
-    hundreds: null, fifties: null, catches: rnd(10, 45),
-  };
-  if (role === "WK") return {
-    matches: rnd(40, 200), runs: rnd(600, 4000), avg: rnd(20, 48, 1),
-    sr: rnd(120, 160, 1), wickets: null, economy: null,
-    hundreds: rnd(0, 4), fifties: rnd(5, 28), catches: rnd(40, 130),
-  };
-  if (role === "AR") return {
-    matches: rnd(50, 140), runs: rnd(900, 3500), avg: rnd(18, 40, 1),
-    sr: rnd(125, 180, 1), wickets: rnd(20, 130), economy: rnd(7.5, 10.2, 2),
-    hundreds: rnd(0, 3), fifties: rnd(4, 20), catches: rnd(20, 65),
-  };
-  return {};
+/* ─── T20 RATING HELPERS ────────────────────────────────────── */
+function getTeamT20Rating(players, teamName) {
+  return players
+    .filter(p => p.soldTo === teamName)
+    .reduce((sum, p) => sum + (p.t20Rating || 0), 0);
 }
 
 /* ─── REDUCER ───────────────────────────────────────────────── */
@@ -177,9 +254,34 @@ const generateTeamPassword = (teamName) => {
   return basePass + "2024";
 };
 
+// Helper: Clear localStorage if version changed, but preserve user login and theme
+const checkAndClearOldCache = () => {
+  const storedVersion = localStorage.getItem("cm_config_version");
+  if (storedVersion !== CONFIG_VERSION) {
+    console.log(`📦 Clearing old cache (version mismatch: ${storedVersion} → ${CONFIG_VERSION})`);
+    // Preserve user login and theme preferences across config updates
+    const savedUser = localStorage.getItem("cm_currentUser");
+    const savedTheme = localStorage.getItem("cm_theme");
+    localStorage.clear();
+    // Restore preserved items
+    if (savedUser) localStorage.setItem("cm_currentUser", savedUser);
+    if (savedTheme) localStorage.setItem("cm_theme", savedTheme);
+    localStorage.setItem("cm_config_version", CONFIG_VERSION);
+  }
+};
+
+checkAndClearOldCache();
+
 const initialState = {
-  currentUser: null,
-  players: JSON.parse(localStorage.getItem("cm_players") || "null") || PLAYERS_INIT,
+  currentUser: JSON.parse(localStorage.getItem("cm_currentUser") || "null"),
+  players: (() => {
+    const cached = JSON.parse(localStorage.getItem("cm_players") || "null");
+    if (cached) {
+      // Always refresh photoUrl from current PLAYER_PHOTOS mapping
+      return cached.map(p => ({ ...p, photoUrl: PLAYER_PHOTOS[p.name] || null }));
+    }
+    return PLAYERS_INIT;
+  })(),
   teams:   JSON.parse(localStorage.getItem("cm_teams")   || "null") || JSON.parse(JSON.stringify(TEAMS_INIT)),
   teamCredentials: JSON.parse(localStorage.getItem("cm_teamCreds") || "{}"),
   history: JSON.parse(localStorage.getItem("cm_history") || "[]"),
@@ -191,8 +293,14 @@ const initialState = {
 
 function reducer(state, action) {
   switch (action.type) {
-    case "LOGIN":      return { ...state, currentUser: action.payload, page: "auction" };
-    case "LOGOUT":     return { ...state, currentUser: null, page: "auction" };
+    case "LOGIN": {
+      localStorage.setItem("cm_currentUser", JSON.stringify(action.payload));
+      return { ...state, currentUser: action.payload, page: "auction" };
+    }
+    case "LOGOUT": {
+      localStorage.removeItem("cm_currentUser");
+      return { ...state, currentUser: null, page: "auction" };
+    }
     case "SET_PAGE":   return { ...state, page: action.payload };
     case "SET_FILTER_ROLE": return { ...state, filterRole: action.payload };
     case "SET_SEARCH":      return { ...state, searchQ: action.payload };
@@ -321,15 +429,59 @@ function reducer(state, action) {
         ...state.teams,
         [teamName]: { ...state.teams[teamName], budget: state.teams[teamName].budget + amount }
       };
-      return { ...state, teams };
+      const history = [
+        { id: Date.now(), playerName: `Budget +${fmtCur(amount)}`, team: teamName, price: amount, action: "BUDGET_ADD", ts: Date.now() },
+        ...state.history,
+      ];
+      return { ...state, teams, history };
     }
 
-    case "RESET_GAME": {
+    case "SET_BUDGET": {
+      const { teamName, budget } = action.payload;
+      const teams = {
+        ...state.teams,
+        [teamName]: { ...state.teams[teamName], budget }
+      };
+      const history = [
+        { id: Date.now(), playerName: `Budget Set to ${fmtCur(budget)}`, team: teamName, price: budget, action: "BUDGET_SET", ts: Date.now() },
+        ...state.history,
+      ];
+      return { ...state, teams, history };
+    }
+
+    case "RESET_AUCTION": {
+      // Option 1: Reset auction for next game (keep team structure, clear assignments)
+      // Used to play another game without changing teams/players config
       const players = state.players.map(p => ({ ...p, soldTo: null, soldPrice: null }));
       const teams = Object.fromEntries(
         Object.entries(state.teams).map(([k, v]) => [k, { ...v, spent: 0 }])
       );
       return { ...state, players, teams, history: [], livePlayerId: null };
+    }
+
+    case "SYNC_CONFIG_TO_FIREBASE": {
+      // Option 2: Sync fresh config to Firebase (nuclear reset matching TEAMS_INIT & PLAYERS_INIT)
+      // Used when config changes and you want Firebase to match local constants
+      const players = JSON.parse(JSON.stringify(PLAYERS_INIT));
+      const teams = JSON.parse(JSON.stringify(TEAMS_INIT));
+      const teamCreds = {};
+      Object.keys(teams).forEach(teamName => {
+        teamCreds[teamName] = { pass: generateTeamPassword(teamName), label: teamName };
+      });
+      // Clear localStorage
+      localStorage.removeItem("cm_players");
+      localStorage.removeItem("cm_teams");
+      localStorage.removeItem("cm_teamCreds");
+      localStorage.removeItem("cm_history");
+      localStorage.removeItem("cm_livePlayer");
+      return {
+        ...state,
+        players,
+        teams,
+        teamCredentials: teamCreds,
+        history: [],
+        livePlayerId: null,
+      };
     }
 
     default:
@@ -364,9 +516,18 @@ const AuctionContext = createContext(null);
 const useAuction = () => useContext(AuctionContext);
 
 function AuctionProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatchBase] = useReducer(reducer, initialState);
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
   const isRemoteUpdateRef = useRef(false); // Track if update came from Firestore (using ref to avoid infinite loops)
+  const isSyncConfigRef = useRef(false); // Track if SYNC_CONFIG_TO_FIREBASE is in progress
+
+  // Wrapper around dispatch to detect SYNC_CONFIG_TO_FIREBASE
+  const dispatch = useCallback((action) => {
+    if (action.type === "SYNC_CONFIG_TO_FIREBASE") {
+      isSyncConfigRef.current = true;
+    }
+    dispatchBase(action);
+  }, []);
 
   // Initialize Firebase and sign in user
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -387,7 +548,10 @@ function AuctionProvider({ children }) {
             isRemoteUpdateRef.current = true; // Mark this as a remote update
             // Only use the data that Firebase actually sent (don't fall back to captured state)
             const payload = {};
-            if (firebaseData.players !== undefined) payload.players = firebaseData.players;
+            if (firebaseData.players !== undefined) {
+              // Always refresh photoUrl from current PLAYER_PHOTOS mapping when syncing from Firebase
+              payload.players = firebaseData.players.map(p => ({ ...p, photoUrl: PLAYER_PHOTOS[p.name] || null }));
+            }
             if (firebaseData.teams !== undefined) payload.teams = firebaseData.teams;
             if (firebaseData.teamCredentials !== undefined) payload.teamCredentials = firebaseData.teamCredentials;
             if (firebaseData.history !== undefined) payload.history = firebaseData.history;
@@ -412,27 +576,33 @@ function AuctionProvider({ children }) {
     initFirebase();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Persist to localStorage (backup) and Firebase (primary)
+  // Sync to Firebase (primary source of truth) — localStorage is emergency fallback only
   useEffect(() => {
-    // Always save to localStorage as fallback
-    localStorage.setItem("cm_players",    JSON.stringify(state.players));
-    localStorage.setItem("cm_teams",      JSON.stringify(state.teams));
-    localStorage.setItem("cm_teamCreds",  JSON.stringify(state.teamCredentials));
-    localStorage.setItem("cm_history",    JSON.stringify(state.history));
-    localStorage.setItem("cm_livePlayer", JSON.stringify(state.livePlayerId));
-
     // Only sync to Firestore if this is a LOCAL change (not from remote listener)
     if (isFirebaseReady && !isRemoteUpdateRef.current) {
-      updateAuctionData({
+      // Check if this is a config sync scenario (fresh 8 teams, 50 players, empty history)
+      const isConfigSync = Object.keys(state.teams).length === 8 && 
+                           state.players.length === 50 && 
+                           state.history.length === 0 &&
+                           isSyncConfigRef.current;
+
+      const syncFn = isConfigSync ? syncConfigToFirebase : updateAuctionData;
+      
+      syncFn({
         players: state.players,
         teams: state.teams,
         teamCredentials: state.teamCredentials,
         history: state.history,
         livePlayerId: state.livePlayerId,
       }).catch(error => {
-        console.error("Failed to update Firestore:", error);
+        console.error("❌ Firebase sync failed:", error);
         // Continue working even if Firebase sync fails
       });
+      
+      // Clear the sync config flag after syncing
+      if (isConfigSync) {
+        isSyncConfigRef.current = false;
+      }
     } else if (isRemoteUpdateRef.current) {
       // Reset the flag immediately for next change (doesn't trigger another effect run since it's a ref)
       isRemoteUpdateRef.current = false;
@@ -639,11 +809,13 @@ function TopBar() {
     { id: "auction",   label: isAdmin ? "AUCTION (ADMIN)" : "AUCTION" },
     { id: "livebid",   label: isAdmin ? "🔴 LIVE BID" : "🔴 LIVE" },
     { id: "display",   label: "📺 DISPLAY" },
+    { id: "squads",    label: "👥 SQUADS" },
     { id: "team",      label: "MY TEAM" },
     { id: "overview",  label: "OVERVIEW" },
     ...(isAdmin ? [
       { id: "history", label: "HISTORY" },
       { id: "manage",  label: "⚙ MANAGE PLAYERS" },
+      { id: "budget",  label: "💰 BUDGETS" },
     ] : []),
   ];
 
@@ -692,32 +864,14 @@ function PlayerCard({ player }) {
   const { state, dispatch } = useAuction();
   const toast = useToast();
   const isAdmin = state.currentUser?.role === "admin";
-  const [selTeam, setSelTeam] = useState(Object.keys(state.teams)[0]);
-  const [bidVal, setBidVal] = useState("");
 
   const isSold = !!player.soldTo;
   const teamColor = isSold ? state.teams[player.soldTo]?.color : null;
-
-  const assign = () => {
-    const price = parseCr(bidVal) || player.base;
-    if (price < player.base) { toast("Bid must be ≥ base price!", true); return; }
-    const t = state.teams[selTeam];
-    if (price > t.budget - t.spent) { toast("Team budget exceeded!", true); return; }
-    if (!canAssignRole(state.players, selTeam, player.role)) {
-      toast(`${selTeam} has reached the ${SLOT_LABELS[player.role]} limit (${SLOT_LIMITS[player.role]})!`, true); return;
-    }
-    dispatch({ type: "ASSIGN_PLAYER", payload: { id: player.id, team: selTeam, price } });
-    toast(`${player.name} → ${selTeam} for ${fmtCur(price)}`);
-    setBidVal("");
-  };
 
   const unassign = () => {
     dispatch({ type: "UNASSIGN_PLAYER", payload: { id: player.id } });
     toast("Player returned to auction pool");
   };
-
-  // Check slot availability per team for this role
-  const slotWarning = isAdmin && !isSold && selTeam && !canAssignRole(state.players, selTeam, player.role);
 
   return (
     <div style={{
@@ -746,6 +900,10 @@ function PlayerCard({ player }) {
       {/* PLAYER STATS */}
       <div style={{ marginTop: 10, width: "100%", fontSize: 11, color: "var(--muted)", lineHeight: 1.6 }}>
         <div style={{ color: "var(--green)", fontFamily: "Share Tech Mono, monospace", fontWeight: 600 }}>Base: {fmtCur(player.base)}</div>
+        <div style={{ marginTop: 8, padding: "8px", background: "rgba(168, 85, 247, 0.1)", border: "1px solid rgba(168, 85, 247, 0.3)", borderRadius: 3 }}>
+          <div style={{ fontSize: 9, letterSpacing: 1, color: "var(--muted)", textTransform: "uppercase", marginBottom: 4 }}>T20 Rating</div>
+          <div style={{ fontFamily: "Oswald", fontSize: 20, fontWeight: 700, color: "#a855f7" }}>{player.t20Rating}</div>
+        </div>
       </div>
 
       {isSold && (
@@ -768,48 +926,33 @@ function PlayerCard({ player }) {
         }}>↩ UNASSIGN</button>
       )}
 
-      {isAdmin && !isSold && (
-        <>
-          <div style={{ display: "flex", gap: 6, marginTop: 10, alignItems: "center" }}>
-            <select value={selTeam} onChange={e => setSelTeam(e.target.value)} style={{
-              flex: 1, background: "var(--bg)", border: "1px solid var(--border)",
-              color: "var(--text)", fontFamily: "Rajdhani, sans-serif", fontSize: 12, padding: "6px 8px", outline: "none",
-            }}>
-              {Object.entries(state.teams).map(([t, td]) => {
-                const full = !canAssignRole(state.players, t, player.role);
-                return <option key={t} value={t}>{t}{full ? " (FULL)" : ""}</option>;
-              })}
-            </select>
-            <input
-              type="number" value={bidVal} onChange={e => setBidVal(e.target.value)}
-              placeholder="Cr e.g. 1.5" style={{
-                width: 80, background: "var(--bg)", border: "1px solid var(--border)",
-                color: "var(--accent)", fontFamily: "Share Tech Mono, monospace",
-                fontSize: 12, padding: "6px 6px", outline: "none", textAlign: "center",
-              }}
-            />
-            <button onClick={assign} style={{
-              background: slotWarning ? "var(--red)" : "var(--accent)", color: "#000", border: "none",
-              fontFamily: "Oswald", fontSize: 12, fontWeight: 600, letterSpacing: 1,
-              padding: "6px 12px", cursor: "pointer",
-            }}>SELL</button>
-          </div>
-          {slotWarning && (
-            <div style={{ fontSize: 10, color: "var(--red)", marginTop: 4, letterSpacing: 1 }}>
-              ⚠ {selTeam} {SLOT_LABELS[player.role]} slot full ({SLOT_LIMITS[player.role]}/{SLOT_LIMITS[player.role]})
-            </div>
-          )}
-        </>
-      )}
+
 
       {isAdmin && !isSold && (
-        <button onClick={() => { dispatch({ type: "SET_LIVE_PLAYER", payload: player.id }); dispatch({ type: "SET_PAGE", payload: "livebid" }); }} style={{
-          width: "100%", marginTop: 6, background: "none",
-          border: `1px solid ${state.livePlayerId === player.id ? "var(--accent)" : "var(--border)"}`,
-          color: state.livePlayerId === player.id ? "var(--accent)" : "var(--muted)",
-          fontFamily: "Rajdhani, sans-serif", fontSize: 11, fontWeight: 600,
-          letterSpacing: 1, padding: "4px 8px", cursor: "pointer",
-        }}>{state.livePlayerId === player.id ? "🔴 LIVE NOW" : "▶ SET AS LIVE BID"}</button>
+        <>
+          {state.livePlayerId === player.id ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <button style={{
+                flex: 1, background: "var(--red)", color: "#fff",
+                border: "none", fontFamily: "Rajdhani, sans-serif", fontSize: 11,
+                fontWeight: 600, letterSpacing: 1, padding: "4px 8px", cursor: "pointer",
+              }}>🔴 LIVE NOW</button>
+              <button onClick={() => dispatch({ type: "CLEAR_LIVE_PLAYER" })} style={{
+                flex: 1, background: "none", border: "1px solid var(--red)",
+                color: "var(--red)", fontFamily: "Rajdhani, sans-serif", fontSize: 11,
+                fontWeight: 600, letterSpacing: 1, padding: "4px 8px", cursor: "pointer",
+              }}>REMOVE BID</button>
+            </div>
+          ) : (
+            <button onClick={() => { dispatch({ type: "SET_LIVE_PLAYER", payload: player.id }); dispatch({ type: "SET_PAGE", payload: "livebid" }); }} style={{
+              width: "100%", marginTop: 6, background: "none",
+              border: "1px solid var(--border)",
+              color: "var(--muted)",
+              fontFamily: "Rajdhani, sans-serif", fontSize: 11, fontWeight: 600,
+              letterSpacing: 1, padding: "4px 8px", cursor: "pointer",
+            }}>▶ SET AS LIVE BID</button>
+          )}
+        </>
       )}
     </div>
   );
@@ -851,16 +994,19 @@ function DisplayPage() {
   Object.keys(teams).forEach(tName => {
     teamRosters[tName] = {
       total: 0,
+      t20Rating: 0,
       BAT: 0,
       BWL: 0,
       WK: 0,
       AR: 0,
+      LEG: 0,
     };
   });
 
   players.forEach(p => {
     if (p.soldTo) {
       teamRosters[p.soldTo].total += 1;
+      teamRosters[p.soldTo].t20Rating += p.t20Rating || 0;
       teamRosters[p.soldTo][p.role] += 1;
     }
   });
@@ -949,98 +1095,171 @@ function DisplayPage() {
                 }}>
                   {livePlayer.base ? fmtCur(livePlayer.base) : "—"}
                 </div>
+                
+                {/* T20 Rating */}
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontSize: 12, letterSpacing: 2, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>
+                    T20 Rating
+                  </div>
+                  <div style={{
+                    fontFamily: "Oswald", fontSize: 42, fontWeight: 700,
+                    color: "#a855f7", letterSpacing: 1,
+                  }}>
+                    {livePlayer.t20Rating}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Team Rosters */}
-      <div>
-        <div style={{
-          fontFamily: "Oswald", fontSize: 24, fontWeight: 700,
-          letterSpacing: 2, marginBottom: 24, paddingBottom: 16,
-          borderBottom: "2px solid var(--border)",
-        }}>
-          TEAM SQUADS
-        </div>
+    </div>
+  );
+}
 
-        <div style={{
-          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-          gap: 24,
-        }}>
-          {Object.entries(teams).map(([tName, tData]) => {
-            const roster = teamRosters[tName];
-            const progress = Math.round((roster.total / TOTAL_SQUAD) * 100);
+/* ─── TEAM SQUADS SECTION (Separated Component) ─────────────── */
+function TeamSquadsSection({ teams, players, teamRosters }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: "Oswald", fontSize: 24, fontWeight: 700,
+        letterSpacing: 2, marginBottom: 24, paddingBottom: 16,
+        borderBottom: "2px solid var(--border)",
+      }}>
+        TEAM SQUADS
+      </div>
 
-            return (
-              <div key={tName} style={{
-                background: "var(--surface)", border: `2px solid ${tData.color}33`,
-                borderTop: `4px solid ${tData.color}`, padding: 24, borderRadius: 8,
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+        gap: 24,
+      }}>
+        {Object.entries(teams).map(([tName, tData]) => {
+          const roster = teamRosters[tName];
+          const progress = Math.round((roster.total / TOTAL_SQUAD) * 100);
+
+          return (
+            <div key={tName} style={{
+              background: "var(--surface)", border: `2px solid ${tData.color}33`,
+              borderTop: `4px solid ${tData.color}`, padding: 24, borderRadius: 8,
+            }}>
+              {/* Team Name & Color */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 12, marginBottom: 20,
               }}>
-                {/* Team Name & Color */}
                 <div style={{
-                  display: "flex", alignItems: "center", gap: 12, marginBottom: 20,
+                  width: 20, height: 20, background: tData.color,
+                  borderRadius: 3, border: "2px solid var(--text)"
+                }} />
+                <div style={{
+                  fontFamily: "Oswald", fontSize: 18, fontWeight: 700,
+                  letterSpacing: 1, color: tData.color,
+                  padding: "0",
+                  borderRadius: "2px",
+                  flex: 1,
                 }}>
-                  <div style={{
-                    width: 20, height: 20, background: tData.color,
-                    borderRadius: 3,
-                  }} />
-                  <div style={{
-                    fontFamily: "Oswald", fontSize: 18, fontWeight: 700,
-                    letterSpacing: 1, color: tData.color,
-                    flex: 1,
-                  }}>
-                    {tName}
-                  </div>
-                  <div style={{
-                    fontSize: 16, fontWeight: 700, color: "var(--accent)",
-                    fontFamily: "Share Tech Mono, monospace",
-                  }}>
-                    {roster.total}/{TOTAL_SQUAD}
-                  </div>
+                  {tName}
                 </div>
-
-                {/* Progress Bar */}
                 <div style={{
-                  height: 8, background: "var(--bg)", borderRadius: 4,
-                  overflow: "hidden", marginBottom: 20,
+                  fontSize: 16, fontWeight: 700, color: "var(--accent)",
+                  fontFamily: "Share Tech Mono, monospace",
                 }}>
-                  <div style={{
-                    height: "100%", width: `${progress}%`, background: tData.color,
-                    transition: "width 0.3s ease",
-                  }} />
-                </div>
-
-                {/* Role Breakdown */}
-                <div style={{
-                  display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12,
-                }}>
-                  {Object.entries(SLOT_LABELS).map(([role, label]) => (
-                    <div key={role} style={{
-                      background: "var(--bg)", padding: "10px 12px", borderRadius: 4,
-                      borderLeft: `3px solid ${ROLE_COLORS[role]}`,
-                    }}>
-                      <div style={{
-                        fontSize: 11, color: "var(--muted)", letterSpacing: 1,
-                        marginBottom: 4, textTransform: "uppercase",
-                      }}>
-                        {label}
-                      </div>
-                      <div style={{
-                        fontSize: 18, fontWeight: 700, color: ROLE_COLORS[role],
-                        fontFamily: "Share Tech Mono, monospace",
-                      }}>
-                        {roster[role]}/{SLOT_LIMITS[role]}
-                      </div>
-                    </div>
-                  ))}
+                  {roster.total}/{TOTAL_SQUAD}
                 </div>
               </div>
-            );
-          })}
-        </div>
+
+              {/* Progress Bar */}
+              <div style={{
+                height: 8, background: "var(--bg)", borderRadius: 4,
+                overflow: "hidden", marginBottom: 20,
+              }}>
+                <div style={{
+                  height: "100%", width: `${progress}%`, background: tData.color,
+                  transition: "width 0.3s ease",
+                }} />
+              </div>
+
+              {/* Role Breakdown */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12,
+              }}>
+                {Object.entries(SLOT_LABELS).map(([role, label]) => (
+                  <div key={role} style={{
+                    background: "var(--bg)", padding: "10px 12px", borderRadius: 4,
+                    borderLeft: `3px solid ${ROLE_COLORS[role]}`,
+                  }}>
+                    <div style={{
+                      fontSize: 11, color: "var(--muted)", letterSpacing: 1,
+                      marginBottom: 4, textTransform: "uppercase",
+                    }}>
+                      {label}
+                    </div>
+                    <div style={{
+                      fontSize: 18, fontWeight: 700, color: ROLE_COLORS[role],
+                      fontFamily: "Share Tech Mono, monospace",
+                    }}>
+                      {roster[role]}/{SLOT_LIMITS[role]}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* T20 Rating Total */}
+              <div style={{
+                marginTop: 20, padding: "12px 16px", background: "#a855f722",
+                borderLeft: "4px solid #a855f7", borderRadius: 4,
+              }}>
+                <div style={{
+                  fontSize: 10, color: "#a855f7", letterSpacing: 1, marginBottom: 6,
+                  textTransform: "uppercase", fontWeight: 700,
+                }}>
+                  Team T20 Rating
+                </div>
+                <div style={{
+                  fontSize: 24, fontWeight: 700, color: "#a855f7",
+                  fontFamily: "Share Tech Mono, monospace",
+                }}>
+                  {getTeamT20Rating(players, tName)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+/* ─── TEAM SQUADS PAGE ─────────────────────────────────────── */
+function TeamSquadsPage() {
+  const { state } = useAuction();
+  const { players, teams } = state;
+
+  // Count players per team
+  const teamRosters = {};
+  Object.keys(teams).forEach(tName => {
+    teamRosters[tName] = {
+      total: 0,
+      t20Rating: 0,
+      BAT: 0,
+      BWL: 0,
+      WK: 0,
+      AR: 0,
+      LEG: 0,
+    };
+  });
+
+  players.forEach(p => {
+    if (p.soldTo) {
+      teamRosters[p.soldTo].total += 1;
+      teamRosters[p.soldTo].t20Rating += p.t20Rating || 0;
+      teamRosters[p.soldTo][p.role] += 1;
+    }
+  });
+
+  return (
+    <div style={{ padding: "40px 24px", maxWidth: 1400, margin: "0 auto", minHeight: "100vh" }}>
+      <TeamSquadsSection teams={teams} players={players} teamRosters={teamRosters} />
     </div>
   );
 }
@@ -1088,7 +1307,7 @@ function AuctionPage() {
       <SquadLimitsLegend />
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 20 }}>
-        {["ALL", "BAT", "BWL", "WK", "AR"].map(r => (
+        {["ALL", "BAT", "BWL", "WK", "AR", "LEG"].map(r => (
           <button key={r} onClick={() => dispatch({ type: "SET_FILTER_ROLE", payload: r })} style={{
             background: filterRole === r ? "var(--accent)" : "var(--surface)",
             border: `1px solid ${filterRole === r ? "var(--accent)" : "var(--border)"}`,
@@ -1096,7 +1315,7 @@ function AuctionPage() {
             fontFamily: "Rajdhani, sans-serif", fontSize: 12, fontWeight: 700,
             letterSpacing: 1.5, padding: "6px 14px", cursor: "pointer", textTransform: "uppercase",
           }}>
-            {r === "ALL" ? "ALL" : r === "BAT" ? `BATSMEN (×${SLOT_LIMITS.BAT})` : r === "BWL" ? `BOWLERS (×${SLOT_LIMITS.BWL})` : r === "WK" ? `KEEPER (×${SLOT_LIMITS.WK})` : `ALL-ROUNDERS (×${SLOT_LIMITS.AR})`}
+            {r === "ALL" ? "ALL" : r === "BAT" ? `BATSMEN (×${SLOT_LIMITS.BAT})` : r === "BWL" ? `BOWLERS (×${SLOT_LIMITS.BWL})` : r === "WK" ? `KEEPER (×${SLOT_LIMITS.WK})` : r === "AR" ? `ALL-ROUNDERS (×${SLOT_LIMITS.AR})` : `LEGENDS (×${SLOT_LIMITS.LEG})`}
           </button>
         ))}
         <input
@@ -1160,6 +1379,13 @@ function TeamSection({ tName, tData, showBudget }) {
 
   return (
     <div style={{ marginBottom: 36 }}>
+      {/* Team Name Header */}
+      <div style={{
+        fontFamily: "Oswald", fontSize: 20, fontWeight: 700, letterSpacing: 2,
+        color: tData.color, marginBottom: 16,
+      }}>
+        {tName}
+      </div>
       <div style={{
         background: "var(--surface)", border: "1px solid var(--border)",
         borderTop: `3px solid ${tData.color}`,
@@ -1167,7 +1393,6 @@ function TeamSection({ tName, tData, showBudget }) {
         display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16,
       }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "Oswald", fontSize: 28, fontWeight: 700, letterSpacing: 2, color: tData.color }}>{tName}</div>
           <div style={{ fontSize: 12, color: "var(--muted)", letterSpacing: 1, marginTop: 4 }}>
             {total} / {TOTAL_SQUAD} players acquired
           </div>
@@ -1184,6 +1409,12 @@ function TeamSection({ tName, tData, showBudget }) {
               <div style={{ height: "100%", width: `${pct}%`, background: cls, transition: "width .5s ease" }} />
             </div>
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Spent: {fmtCur(tData.spent)} / {fmtCur(tData.budget)}</div>
+            
+            {/* T20 Rating Total */}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 11, letterSpacing: 2, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>Team T20 Rating</div>
+              <div style={{ fontFamily: "Oswald", fontSize: 32, fontWeight: 700, color: "#a855f7" }}>{getTeamT20Rating(state.players, tName)}</div>
+            </div>
           </div>
         )}
       </div>
@@ -1211,7 +1442,10 @@ function TeamSection({ tName, tData, showBudget }) {
                       <PlayerAvatar name={p.name} role={p.role} size={36} photoUrl={p.photoUrl} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontFamily: "Oswald", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
-                        <div style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 11, color: "var(--accent)" }}>{fmtCur(p.soldPrice)}</div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 2, fontSize: 11 }}>
+                          <span style={{ fontFamily: "Share Tech Mono, monospace", color: "var(--accent)" }}>{fmtCur(p.soldPrice)}</span>
+                          <span style={{ color: "#a855f7", fontWeight: 600 }}>⭐ {p.t20Rating}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1260,7 +1494,8 @@ function TeamPage() {
 
 /* ─── OVERVIEW PAGE ─────────────────────────────────────────── */
 function OverviewPage() {
-  const { state } = useAuction();
+  const { state, dispatch } = useAuction();
+  const toast = useToast();
   const { players, teams, currentUser } = state;
   const isAdmin = currentUser?.role === "admin";
   const myTeam = currentUser?.team;
@@ -1268,10 +1503,46 @@ function OverviewPage() {
   const total = players.length;
   const sold  = players.filter(p => p.soldTo).length;
 
+  const handleResetAuction = () => {
+    if (window.confirm("🔄 START NEW GAME?\n\nThis will:\n• Return all sold players to auction\n• Reset all team budgets to 1000L\n• Clear auction history\n• KEEP current teams & players config\n\nYou can play another round!")) {
+      dispatch({ type: "RESET_AUCTION" });
+      toast("✅ Auction reset! Ready to play again.", false);
+    }
+  };
+
+  const handleSyncConfigToFirebase = () => {
+    if (window.confirm("⚠️ SYNC CONFIG TO FIREBASE?\n\nThis will:\n• Update entire database to match local config\n• Reset all sold players\n• Reset all team budgets\n• Delete all history\n• Sync TEAMS and PLAYERS to cloud\n\nUse this when config changes. CANNOT be undone!")) {
+      dispatch({ type: "SYNC_CONFIG_TO_FIREBASE" });
+      toast("✅ Config synced to Firebase!", false);
+    }
+  };
+
   return (
     <div style={{ padding: "28px 24px", maxWidth: 1400, margin: "0 auto" }}>
-      <div style={{ fontFamily: "Oswald", fontSize: 28, fontWeight: 700, letterSpacing: 2, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
-        TEAMS <span style={{ color: "var(--accent)" }}>OVERVIEW</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
+        <div style={{ fontFamily: "Oswald", fontSize: 28, fontWeight: 700, letterSpacing: 2 }}>
+          TEAMS <span style={{ color: "var(--accent)" }}>OVERVIEW</span>
+        </div>
+        {isAdmin && (
+          <div style={{ display: "flex", gap: 12 }}>
+            <button onClick={handleSyncConfigToFirebase} style={{
+              background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.5)",
+              color: "var(--red)", fontFamily: "Rajdhani, sans-serif", fontSize: 12, fontWeight: 600,
+              letterSpacing: 1, padding: "8px 16px", cursor: "pointer", borderRadius: 4,
+              opacity: 0.8, transition: "all 0.2s",
+            }} onMouseEnter={e => e.target.style.opacity = "1"} onMouseLeave={e => e.target.style.opacity = "0.8"}>
+              ⚠️ SYNC CONFIG
+            </button>
+            <button onClick={handleResetAuction} style={{
+              background: "rgba(59, 130, 246, 0.1)", border: "1px solid rgba(59, 130, 246, 0.5)",
+              color: "var(--accent)", fontFamily: "Rajdhani, sans-serif", fontSize: 12, fontWeight: 600,
+              letterSpacing: 1, padding: "8px 16px", cursor: "pointer", borderRadius: 4,
+              opacity: 0.8, transition: "all 0.2s",
+            }} onMouseEnter={e => e.target.style.opacity = "1"} onMouseLeave={e => e.target.style.opacity = "0.8"}>
+              🔄 RESET AUCTION
+            </button>
+          </div>
+        )}
       </div>
 
       <SquadLimitsLegend />
@@ -1302,7 +1573,13 @@ function OverviewPage() {
 
           return (
             <div key={tName} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderTop: `3px solid ${tData.color}`, padding: 24 }}>
-              <div style={{ fontFamily: "Oswald", fontSize: 20, fontWeight: 700, letterSpacing: 1.5, color: tData.color, marginBottom: 8 }}>{tName}</div>
+              {/* Team Name */}
+              <div style={{
+                fontFamily: "Oswald", fontSize: 16, fontWeight: 700, letterSpacing: 1,
+                color: tData.color, marginBottom: 16,
+              }}>
+                {tName}
+              </div>
 
               {/* Squad slot progress */}
               <div style={{ marginBottom: 14 }}>
@@ -1313,6 +1590,7 @@ function OverviewPage() {
 
               {[
                 ["Total Players", `${tp.length} / ${TOTAL_SQUAD}`, "var(--text)"],
+                ["T20 Rating", getTeamT20Rating(players, tName), "#a855f7"],
                 ...(canSeeBudget ? [
                   ["Spent",         fmtCur(tData.spent),    "var(--accent)"],
                   ["Remaining",     fmtCur(remaining),      "var(--green)"],
@@ -1322,7 +1600,7 @@ function OverviewPage() {
               ].map(([label, val, color]) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
                   <span style={{ color: "var(--muted)" }}>{label}</span>
-                  <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 13, color }}>{val}</span>
+                  <span style={{ fontFamily: label === "T20 Rating" ? "Oswald" : "Share Tech Mono, monospace", fontSize: label === "T20 Rating" ? 16 : 13, fontWeight: label === "T20 Rating" ? 700 : 400, color }}>{val}</span>
                 </div>
               ))}
             </div>
@@ -1344,7 +1622,6 @@ function OverviewPage() {
                 const full = cnt >= lim;
                 return (
                   <div key={tName} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, alignItems: "center" }}>
-                    <span style={{ color: tData.color, fontSize: 11 }}>{tName.split(" ")[0]}</span>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <div style={{ display: "flex", gap: 2 }}>
                         {Array.from({ length: lim }).map((_, i) => (
@@ -1366,32 +1643,66 @@ function OverviewPage() {
 
 /* ─── PLAYER STATS ──────────────────────────────────────────── */
 const PLAYER_STATS = {
-  "Rohit Sharma":      { matches:243, runs:9205,  avg:48.7,  sr:140.9, wickets:null, economy:null,  hundreds:3,  fifties:29, catches:68  },
-  "David Warner":      { matches:110, runs:3277,  avg:33.4,  sr:142.6, wickets:null, economy:null,  hundreds:1,  fifties:26, catches:44  },
-  "Babar Azam":        { matches:106, runs:3985,  avg:41.5,  sr:128.6, wickets:null, economy:null,  hundreds:3,  fifties:33, catches:37  },
-  "Faf du Plessis":    { matches:143, runs:4431,  avg:36.5,  sr:135.0, wickets:null, economy:null,  hundreds:4,  fifties:28, catches:52  },
-  "KL Rahul":          { matches:72,  runs:2265,  avg:36.5,  sr:134.7, wickets:null, economy:null,  hundreds:1,  fifties:22, catches:60  },
-  "Kane Williamson":   { matches:95,  runs:3227,  avg:33.9,  sr:125.9, wickets:null, economy:null,  hundreds:2,  fifties:22, catches:42  },
-  "Travis Head":       { matches:55,  runs:1623,  avg:30.6,  sr:152.4, wickets:null, economy:null,  hundreds:3,  fifties:9,  catches:27  },
-  "Jasprit Bumrah":    { matches:120, runs:null,  avg:null,  sr:null,  wickets:145,  economy:7.39,  hundreds:null, fifties:null, catches:28  },
-  "Pat Cummins":       { matches:106, runs:null,  avg:null,  sr:null,  wickets:148,  economy:8.57,  hundreds:null, fifties:null, catches:35  },
-  "Rashid Khan":       { matches:118, runs:null,  avg:null,  sr:null,  wickets:169,  economy:6.71,  hundreds:null, fifties:null, catches:42  },
-  "Mitchell Starc":    { matches:74,  runs:null,  avg:null,  sr:null,  wickets:99,   economy:8.65,  hundreds:null, fifties:null, catches:24  },
-  "Kagiso Rabada":     { matches:84,  runs:null,  avg:null,  sr:null,  wickets:117,  economy:8.29,  hundreds:null, fifties:null, catches:28  },
-  "Trent Boult":       { matches:82,  runs:null,  avg:null,  sr:null,  wickets:108,  economy:8.32,  hundreds:null, fifties:null, catches:35  },
-  "Mohammed Shami":    { matches:86,  runs:null,  avg:null,  sr:null,  wickets:113,  economy:8.84,  hundreds:null, fifties:null, catches:21  },
-  "Shaheen Afridi":    { matches:68,  runs:null,  avg:null,  sr:null,  wickets:97,   economy:8.05,  hundreds:null, fifties:null, catches:18  },
-  "MS Dhoni":          { matches:350, runs:4746,  avg:39.2,  sr:135.9, wickets:null, economy:null,  hundreds:0,   fifties:23, catches:132 },
-  "Jos Buttler":       { matches:167, runs:4204,  avg:33.4,  sr:143.6, wickets:null, economy:null,  hundreds:4,   fifties:27, catches:96  },
-  "Rishabh Pant":      { matches:82,  runs:2163,  avg:34.9,  sr:148.1, wickets:null, economy:null,  hundreds:1,   fifties:13, catches:89  },
-  "Heinrich Klaasen":  { matches:65,  runs:1878,  avg:37.5,  sr:152.0, wickets:null, economy:null,  hundreds:2,   fifties:13, catches:54  },
-  "Quinton de Kock":   { matches:107, runs:3159,  avg:29.7,  sr:133.8, wickets:null, economy:null,  hundreds:4,   fifties:17, catches:116 },
-  "Ben Stokes":        { matches:115, runs:2347,  avg:26.1,  sr:128.4, wickets:74,   economy:8.82,  hundreds:1,   fifties:14, catches:53  },
-  "Hardik Pandya":     { matches:115, runs:2071,  avg:28.7,  sr:145.2, wickets:65,   economy:9.01,  hundreds:0,   fifties:12, catches:40  },
-  "Shakib Al Hasan":   { matches:122, runs:2386,  avg:24.6,  sr:125.3, wickets:129,  economy:7.74,  hundreds:0,   fifties:13, catches:43  },
-  "Andre Russell":     { matches:106, runs:1908,  avg:31.8,  sr:177.4, wickets:81,   economy:9.24,  hundreds:0,   fifties:6,  catches:32  },
-  "Glenn Maxwell":     { matches:115, runs:2608,  avg:29.0,  sr:158.7, wickets:37,   economy:8.94,  hundreds:3,   fifties:15, catches:48  },
-  "Marcus Stoinis":    { matches:78,  runs:1639,  avg:26.0,  sr:142.3, wickets:33,   economy:9.35,  hundreds:1,   fifties:7,  catches:31  },
+  // Batsmen
+  "Ruturaj Gaikwad":    { matches:85,  runs:2156,  avg:31.5,  sr:132.1, wickets:null, economy:null,  hundreds:0,   fifties:14, catches:18  },
+  "Shikhar Dhawan":     { matches:175, runs:5169,  avg:32.0,  sr:127.8, wickets:null, economy:null,  hundreds:2,   fifties:36, catches:41  },
+  "Sophie Devine":      { matches:142, runs:3589,  avg:32.6,  sr:131.4, wickets:null, economy:null,  hundreds:8,   fifties:22, catches:44  },
+  "Yashasvi Jaiswal":   { matches:32,  runs:1041,  avg:35.2,  sr:148.6, wickets:null, economy:null,  hundreds:2,   fifties:4,  catches:8   },
+  "Kane Williamson":    { matches:95,  runs:3227,  avg:33.9,  sr:125.9, wickets:null, economy:null,  hundreds:2,   fifties:22, catches:42  },
+  "Shreyas Iyer":       { matches:69,  runs:1854,  avg:32.1,  sr:127.4, wickets:null, economy:null,  hundreds:1,   fifties:10, catches:19  },
+  "Phil Salt":          { matches:58,  runs:1923,  avg:35.6,  sr:152.3, wickets:null, economy:null,  hundreds:4,   fifties:9,  catches:35  },
+  "Suryakumar Yadav":   { matches:72,  runs:2566,  avg:42.8,  sr:157.2, wickets:null, economy:null,  hundreds:4,   fifties:17, catches:26  },
+  "Shubman Gill":       { matches:45,  runs:1294,  avg:32.4,  sr:129.5, wickets:null, economy:null,  hundreds:1,   fifties:7,  catches:14  },
+  "Ellyse Perry":       { matches:155, runs:4329,  avg:36.1,  sr:128.7, wickets:107,  economy:7.84,  hundreds:9,   fifties:27, catches:65  },
+  "Virat Kohli":        { matches:112, runs:4055,  avg:42.4,  sr:140.3, wickets:null, economy:null,  hundreds:7,   fifties:31, catches:48  },
+  "Aaron Finch":        { matches:103, runs:3044,  avg:33.5,  sr:147.6, wickets:null, economy:null,  hundreds:1,   fifties:18, catches:35  },
+  "Tilak Verma":        { matches:38,  runs:892,   avg:28.1,  sr:118.9, wickets:null, economy:null,  hundreds:0,   fifties:5,  catches:9   },
+  "Steve Smith":        { matches:92,  runs:2705,  avg:37.3,  sr:130.8, wickets:null, economy:null,  hundreds:3,   fifties:15, catches:31  },
+  "Harmanpreet Kaur":   { matches:114, runs:3421,  avg:35.5,  sr:134.2, wickets:21,   economy:8.34,  hundreds:4,   fifties:21, catches:52  },
+  "David Warner":       { matches:110, runs:3277,  avg:33.4,  sr:142.6, wickets:null, economy:null,  hundreds:1,   fifties:26, catches:44  },
+  "Rohit Sharma":       { matches:156, runs:5326,  avg:41.7,  sr:140.5, wickets:null, economy:null,  hundreds:5,   fifties:32, catches:58  },
+  "Rinku Singh":        { matches:18,  runs:421,   avg:29.4,  sr:145.7, wickets:null, economy:null,  hundreds:0,   fifties:2,  catches:4   },
+  "Faf Du Plessis":     { matches:143, runs:4431,  avg:36.5,  sr:135.0, wickets:null, economy:null,  hundreds:4,   fifties:28, catches:52  },
+  "Smriti Mandhana":    { matches:127, runs:3686,  avg:34.2,  sr:135.8, wickets:15,   economy:8.12,  hundreds:6,   fifties:25, catches:64  },
+  // Bowlers
+  "Kagiso Rabada":      { matches:84,  runs:null,  avg:null,  sr:null,  wickets:117,  economy:8.29,  hundreds:null, fifties:null, catches:28  },
+  "Sarah Glenn":        { matches:78,  runs:null,  avg:null,  sr:null,  wickets:96,   economy:7.56,  hundreds:null, fifties:null, catches:24  },
+  "Mohammed Shami":     { matches:86,  runs:null,  avg:null,  sr:null,  wickets:113,  economy:8.84,  hundreds:null, fifties:null, catches:21  },
+  "Kuldeep Yadav":      { matches:68,  runs:null,  avg:null,  sr:null,  wickets:98,   economy:7.34,  hundreds:null, fifties:null, catches:18  },
+  "Amelia Kerr":        { matches:92,  runs:null,  avg:null,  sr:null,  wickets:119,  economy:7.21,  hundreds:null, fifties:null, catches:31  },
+  "Bhuvneshwar Kumar":  { matches:97,  runs:null,  avg:null,  sr:null,  wickets:128,  economy:8.01,  hundreds:null, fifties:null, catches:26  },
+  "Yuzvendra Chahal":   { matches:84,  runs:null,  avg:null,  sr:null,  wickets:112,  economy:7.89,  hundreds:null, fifties:null, catches:19  },
+  "Jasprit Bumrah":     { matches:120, runs:null,  avg:null,  sr:null,  wickets:145,  economy:7.39,  hundreds:null, fifties:null, catches:28  },
+  "Trent Boult":        { matches:82,  runs:null,  avg:null,  sr:null,  wickets:108,  economy:8.32,  hundreds:null, fifties:null, catches:35  },
+  "Rashid Khan":        { matches:118, runs:null,  avg:null,  sr:null,  wickets:169,  economy:6.71,  hundreds:null, fifties:null, catches:42  },
+  "Sophie Ecclestone":  { matches:85,  runs:null,  avg:null,  sr:null,  wickets:107,  economy:7.14,  hundreds:null, fifties:null, catches:29  },
+  "Mitchell Starc":     { matches:74,  runs:null,  avg:null,  sr:null,  wickets:99,   economy:8.65,  hundreds:null, fifties:null, catches:24  },
+  "Mohammad Siraj":     { matches:52,  runs:null,  avg:null,  sr:null,  wickets:71,   economy:9.12,  hundreds:null, fifties:null, catches:14  },
+  "Deepti Sharma":      { matches:94,  runs:null,  avg:null,  sr:null,  wickets:118,  economy:7.98,  hundreds:null, fifties:null, catches:38  },
+  "Lasith Malinga":     { matches:122, runs:null,  avg:null,  sr:null,  wickets:170,  economy:8.41,  hundreds:null, fifties:null, catches:41  },
+  "Dale Steyn":         { matches:104, runs:null,  avg:null,  sr:null,  wickets:151,  economy:8.23,  hundreds:null, fifties:null, catches:37  },
+  "Zaheer Khan":        { matches:86,  runs:null,  avg:null,  sr:null,  wickets:121,  economy:8.67,  hundreds:null, fifties:null, catches:23  },
+  "Morne Morkel":       { matches:89,  runs:null,  avg:null,  sr:null,  wickets:125,  economy:8.54,  hundreds:null, fifties:null, catches:31  },
+  "Imran Tahir":        { matches:78,  runs:null,  avg:null,  sr:null,  wickets:104,  economy:7.76,  hundreds:null, fifties:null, catches:26  },
+  "Sunil Narine":       { matches:95,  runs:1342,  avg:18.7,  sr:142.3, wickets:129,  economy:6.89,  hundreds:null, fifties:null, catches:34  },
+  // Wicket-keepers
+  "Quinton de Kock":    { matches:107, runs:3159,  avg:29.7,  sr:133.8, wickets:null, economy:null,  hundreds:4,   fifties:17, catches:116 },
+  "Glenn Philips":      { matches:68,  runs:1956,  avg:31.2,  sr:148.6, wickets:null, economy:null,  hundreds:2,   fifties:12, catches:71  },
+  "MS Dhoni":           { matches:98,  runs:2773,  avg:37.5,  sr:137.8, wickets:null, economy:null,  hundreds:1,   fifties:18, catches:84  },
+  "Ishan Kishan":       { matches:52,  runs:1687,  avg:32.4,  sr:146.8, wickets:null, economy:null,  hundreds:2,   fifties:9,  catches:62  },
+  "Dinesh Karthik":     { matches:97,  runs:2619,  avg:31.8,  sr:132.4, wickets:4,    economy:10.12, hundreds:1,   fifties:12, catches:68  },
+  "Rishabh Pant":       { matches:82,  runs:2163,  avg:34.9,  sr:148.1, wickets:null, economy:null,  hundreds:1,   fifties:13, catches:89  },
+  // All-rounders
+  "Glenn Maxwell":      { matches:115, runs:2608,  avg:29.0,  sr:158.7, wickets:37,   economy:8.94,  hundreds:3,   fifties:15, catches:48  },
+  "Hardik Pandya":      { matches:115, runs:2071,  avg:28.7,  sr:145.2, wickets:65,   economy:9.01,  hundreds:0,   fifties:12, catches:40  },
+  "Ben Stokes":         { matches:115, runs:2347,  avg:26.1,  sr:128.4, wickets:74,   economy:8.82,  hundreds:1,   fifties:14, catches:53  },
+  "Axar Patel":         { matches:72,  runs:1234,  avg:24.3,  sr:134.8, wickets:89,   economy:7.94,  hundreds:0,   fifties:6,  catches:32  },
+  "Ravindra Jadeja":    { matches:88,  runs:1512,  avg:23.4,  sr:128.9, wickets:124,  economy:7.65,  hundreds:0,   fifties:8,  catches:41  },
+  // Legends
+  "AB de Villiers":     { matches:156, runs:5162,  avg:38.7,  sr:155.8, wickets:null, economy:null,  hundreds:1,   fifties:40, catches:29  },
+  "Sachin Tendulkar":   { matches:100, runs:3640,  avg:41.3,  sr:138.2, wickets:null, economy:null,  hundreds:8,   fifties:18, catches:35  },
+  "Chris Gayle":        { matches:121, runs:4005,  avg:37.2,  sr:147.2, wickets:null, economy:null,  hundreds:6,   fifties:23, catches:18  },
+  "Kieron Pollard":     { matches:152, runs:3829,  avg:34.2,  sr:159.4, wickets:63,   economy:8.76,  hundreds:0,   fifties:27, catches:35  },
 };
 
 /* ─── LIVE BID PAGE ─────────────────────────────────────────── */
@@ -1418,7 +1729,7 @@ function LiveBidPage() {
   }, [livePlayerId, player]);
 
   const assign = () => {
-    const price = parseCr(bidVal) || player.base;
+    const price = parseAmount(bidVal) || player.base;
     if (price < player.base) { toast("Bid must be ≥ base price!", true); return; }
     const t = teams[selTeam];
     if (price > t.budget - t.spent) { toast(`${selTeam} budget exceeded!`, true); return; }
@@ -1434,6 +1745,11 @@ function LiveBidPage() {
   const unsold = () => {
     dispatch({ type: "CLEAR_LIVE_PLAYER" });
     toast(`${player.name} marked as UNSOLD`, true);
+  };
+
+  const removeBid = () => {
+    dispatch({ type: "CLEAR_LIVE_PLAYER" });
+    toast(`Removed ${player.name} from live bid`);
   };
 
   const StatBox = ({ label, value, color = "var(--text)" }) => (
@@ -1467,16 +1783,29 @@ function LiveBidPage() {
             const tp = players.filter(p => p.soldTo === tName);
             const rem = tData.budget - tData.spent;
             const pct = Math.round((rem / tData.budget) * 100);
+            const canSeeBudget = isAdmin || currentUser?.team === tName;
             return (
               <div key={tName} style={{ background: "var(--surface)", border: `1px solid ${tData.color}33`, borderTop: `2px solid ${tData.color}`, padding: 14 }}>
+                {/* Team Name */}
+                <div style={{
+                  fontFamily: "Oswald", fontSize: 14, fontWeight: 700, letterSpacing: 1,
+                  color: tData.color, marginBottom: 10,
+                }}>
+                  {tName}
+                </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <span style={{ fontFamily: "Oswald", fontSize: 14, fontWeight: 700, color: tData.color, letterSpacing: 1 }}>{tName}</span>
                   <span style={{ fontSize: 10, fontFamily: "Share Tech Mono, monospace", color: "var(--muted)" }}>{tp.length}/{TOTAL_SQUAD}</span>
                 </div>
                 <TeamSlotsDisplay teamName={tName} players={players} compact />
+                {canSeeBudget && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                    <span style={{ fontSize: 10, color: "var(--muted)" }}>Budget left</span>
+                    <span style={{ fontSize: 12, fontFamily: "Share Tech Mono, monospace", color: pct > 50 ? "var(--green)" : pct > 20 ? "var(--accent)" : "var(--red)" }}>{fmtCur(rem)}</span>
+                  </div>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                  <span style={{ fontSize: 10, color: "var(--muted)" }}>Budget left</span>
-                  <span style={{ fontSize: 12, fontFamily: "Share Tech Mono, monospace", color: pct > 50 ? "var(--green)" : pct > 20 ? "var(--accent)" : "var(--red)" }}>{fmtCur(rem)}</span>
+                  <span style={{ fontSize: 10, color: "#a855f7", fontWeight: 700 }}>T20 Rating</span>
+                  <span style={{ fontSize: 12, fontFamily: "Share Tech Mono, monospace", color: "#a855f7", fontWeight: 700 }}>{getTeamT20Rating(players, tName)}</span>
                 </div>
               </div>
             );
@@ -1613,6 +1942,10 @@ function LiveBidPage() {
                   <div style={{ fontSize: 10, letterSpacing: 2, color: "var(--muted)", textTransform: "uppercase" }}>BASE PRICE</div>
                   <div style={{ fontFamily: "Oswald", fontSize: 30, fontWeight: 700, color: "var(--accent)", lineHeight: 1.1 }}>{fmtCur(player.base)}</div>
                 </div>
+                <div style={{ display: "inline-block", background: "rgba(168, 85, 247, .08)", border: "1px solid rgba(168, 85, 247, .2)", padding: "10px 20px", marginLeft: 12 }}>
+                  <div style={{ fontSize: 10, letterSpacing: 2, color: "var(--muted)", textTransform: "uppercase" }}>T20 RATING</div>
+                  <div style={{ fontFamily: "Oswald", fontSize: 30, fontWeight: 700, color: "#a855f7", lineHeight: 1.1 }}>{player.t20Rating}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -1649,7 +1982,7 @@ function LiveBidPage() {
                     padding: "10px 14px", flex: 1, minWidth: 130,
                     opacity: slotFull ? 0.7 : 1,
                   }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: tData.color, marginBottom: 4 }}>{tName}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: tData.color, marginBottom: 6, letterSpacing: 0.5 }}>{tName}</div>
                     <div style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 14, color: pct > 50 ? "var(--green)" : pct > 20 ? "var(--accent)" : "var(--red)" }}>{fmtCur(rem)}</div>
                     <div style={{ height: 3, background: "var(--border)", marginTop: 4, borderRadius: 2, overflow: "hidden" }}>
                       <div style={{ height: "100%", width: `${pct}%`, background: tData.color, transition: "width .4s" }} />
@@ -1677,7 +2010,7 @@ function LiveBidPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {Object.entries(teams).map(([tName, tData]) => {
                     const rem = tData.budget - tData.spent;
-                    const canAfford = rem >= (parseCr(bidVal) || player.base);
+                    const canAfford = rem >= (parseAmount(bidVal) || player.base);
                     const slotAvail = canAssignRole(players, tName, player.role);
                     const slots = getTeamSlots(players, tName);
                     return (
@@ -1687,9 +2020,10 @@ function LiveBidPage() {
                         padding: "10px 14px", cursor: slotAvail ? "pointer" : "not-allowed", textAlign: "left",
                         display: "flex", alignItems: "center", justifyContent: "space-between",
                         opacity: (canAfford && slotAvail) ? 1 : 0.5,
+                        boxShadow: tData.color === "#00d4ff" || tData.color === "#d946ef" ? `inset 0 0 0 1px rgba(255,255,255,0.4)` : "none",
                       }}>
-                        <div>
-                          <span style={{ fontFamily: "Oswald", fontSize: 13, color: selTeam === tName ? tData.color : "var(--text)", letterSpacing: 1, display: "block" }}>{tName}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, color: tData.color, marginBottom: 4, fontSize: 12, letterSpacing: 0.5 }}>{tName}</div>
                           {!slotAvail && <span style={{ fontSize: 9, color: "var(--red)", letterSpacing: 1 }}>⛔ {SLOT_LABELS[player.role]} SLOT FULL</span>}
                           {slotAvail && <span style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1 }}>{SLOT_LABELS[player.role]}: {slots[player.role]}/{SLOT_LIMITS[player.role]}</span>}
                         </div>
@@ -1703,16 +2037,16 @@ function LiveBidPage() {
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>Winning Bid Amount</div>
                 <input
-                  type="number" value={bidVal}
+                  type="text" value={bidVal}
                   onChange={e => setBidVal(e.target.value)}
-                  placeholder={`Min: ${fmtCur(player.base)}`}
+                  placeholder={`Min: ${fmtCur(player.base)} (e.g., 10 or 1C)`}
                   style={{
                     width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
                     color: "var(--accent)", fontFamily: "Share Tech Mono, monospace",
                     fontSize: 18, padding: "12px 14px", outline: "none", textAlign: "center", letterSpacing: 2,
                   }}
                 />
-                {bidVal && parseCr(bidVal) < player.base && (
+                {bidVal && parseAmount(bidVal) < player.base && (
                   <div style={{ fontSize: 11, color: "var(--red)", marginTop: 6, letterSpacing: 1 }}>⚠ Below base price ({fmtCur(player.base)})</div>
                 )}
               </div>
@@ -1731,11 +2065,18 @@ function LiveBidPage() {
               }}>
                 {slotWarning ? "⛔ SLOT FULL" : `🔨 SOLD TO ${selTeam.split(" ")[0]}`}
               </button>
-              <button onClick={unsold} style={{
-                width: "100%", background: "none", border: "1px solid var(--muted)",
-                color: "var(--muted)", fontFamily: "Rajdhani, sans-serif", fontSize: 13,
-                fontWeight: 600, letterSpacing: 2, padding: "10px", cursor: "pointer",
-              }}>MARK AS UNSOLD</button>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <button onClick={unsold} style={{
+                  flex: 1, background: "none", border: "1px solid var(--muted)",
+                  color: "var(--muted)", fontFamily: "Rajdhani, sans-serif", fontSize: 13,
+                  fontWeight: 600, letterSpacing: 2, padding: "10px", cursor: "pointer",
+                }}>MARK AS UNSOLD</button>
+                <button onClick={removeBid} style={{
+                  flex: 1, background: "none", border: "1px solid var(--red)",
+                  color: "var(--red)", fontFamily: "Rajdhani, sans-serif", fontSize: 13,
+                  fontWeight: 600, letterSpacing: 2, padding: "10px", cursor: "pointer",
+                }}>REMOVE BID</button>
+              </div>
             </div>
           ) : (
             <div style={{ background: "var(--surface)", border: `1px solid ${roleColor}33`, borderTop: `3px solid ${roleColor}`, padding: 24, textAlign: "center" }}>
@@ -1745,6 +2086,8 @@ function LiveBidPage() {
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{player.country} · {ROLES[player.role]}</div>
               <div style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 20, color: "var(--green)", marginTop: 16 }}>{fmtCur(player.base)}</div>
               <div style={{ fontSize: 10, letterSpacing: 2, color: "var(--muted)", marginTop: 4 }}>BASE PRICE</div>
+              <div style={{ fontFamily: "Oswald", fontSize: 24, fontWeight: 700, color: "#a855f7", marginTop: 12 }}>{player.t20Rating}</div>
+              <div style={{ fontSize: 10, letterSpacing: 2, color: "var(--muted)", marginTop: 4 }}>T20 RATING</div>
               <div style={{ marginTop: 20, padding: "10px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.2)" }}>
                 <span style={{ fontSize: 11, color: "var(--red)", letterSpacing: 2 }}>🔴 BIDDING IN PROGRESS</span>
               </div>
@@ -1793,23 +2136,33 @@ function HistoryPage() {
             {history.map(h => {
               const tColor = teams[h.team]?.color || "#888";
               const isSold = h.action === "SOLD";
+              const isReturned = h.action === "RETURNED";
+              const isBudgetAction = h.action === "BUDGET_ADD" || h.action === "BUDGET_SET";
+              const borderColor = isSold ? "var(--green)" : isBudgetAction ? "var(--blue)" : "var(--red)";
+              const badgeBg = isSold ? "rgba(34,197,94,.15)" : isBudgetAction ? "rgba(59,130,246,.15)" : "rgba(239,68,68,.15)";
+              const badgeColor = isSold ? "var(--green)" : isBudgetAction ? "var(--blue)" : "var(--red)";
+              
               return (
                 <div key={h.id} style={{
                   background: "var(--surface)", border: "1px solid var(--border)",
-                  borderLeft: `3px solid ${isSold ? "var(--green)" : "var(--red)"}`,
+                  borderLeft: `3px solid ${borderColor}`,
                   padding: "12px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
                 }}>
                   <span style={{
                     fontSize: 10, fontWeight: 700, letterSpacing: 2, padding: "2px 8px",
-                    background: isSold ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)",
-                    color: isSold ? "var(--green)" : "var(--red)",
+                    background: badgeBg,
+                    color: badgeColor,
                   }}>{h.action}</span>
                   <span style={{ fontFamily: "Oswald", fontSize: 16, fontWeight: 600, flex: 1 }}>{h.playerName}</span>
                   {isSold && <>
                     <span style={{ fontSize: 13, color: tColor, fontWeight: 700 }}>→ {h.team}</span>
                     <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 13, color: "var(--accent)" }}>{fmtCur(h.price)}</span>
                   </>}
-                  {!isSold && <span style={{ fontSize: 12, color: "var(--muted)" }}>from {h.team} — {fmtCur(h.price)}</span>}
+                  {isBudgetAction && <>
+                    <span style={{ fontSize: 13, color: tColor, fontWeight: 700 }}>🔹 {h.team}</span>
+                    <span style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 13, color: "var(--accent)" }}>{fmtCur(h.price)}</span>
+                  </>}
+                  {isReturned && <span style={{ fontSize: 12, color: "var(--muted)" }}>from {h.team} — {fmtCur(h.price)}</span>}
                   <span style={{ fontSize: 11, color: "var(--border)", fontFamily: "Share Tech Mono, monospace", marginLeft: "auto" }}>{fmtTime(h.ts)}</span>
                 </div>
               );
@@ -1820,57 +2173,136 @@ function HistoryPage() {
   );
 }
 
-/* ─── MANAGE PLAYERS PAGE (ADMIN) ───────────────────────────── */
-const COUNTRIES = ["India","Australia","England","Pakistan","S. Africa","New Zealand","West Indies","Bangladesh","Afghanistan","Sri Lanka","Zimbabwe","Ireland","Netherlands","Other"];
+/* ─── BUDGET MANAGEMENT PAGE (ADMIN) ────────────────────────── */
+function BudgetManagementPage() {
+  const { state, dispatch } = useAuction();
+  const toast = useToast();
 
+  const handleAddFunds = (teamName, amount) => {
+    const amt = parseAmount(amount);
+    if (!amount.trim() || amt <= 0) { toast("Please enter a valid amount!", true); return; }
+    dispatch({ type: "ADD_TEAM_FUNDS", payload: { teamName, amount: amt } });
+    toast(`✅ ${fmtCur(amt)} added to ${teamName}!`);
+    document.getElementById(`add-${teamName}`).value = "";
+  };
+
+  const handleSetBudget = (teamName, amount) => {
+    const newBudget = parseAmount(amount);
+    if (!amount.trim() || newBudget < 0) { toast("Please enter a valid budget!", true); return; }
+    dispatch({ type: "SET_BUDGET", payload: { teamName, budget: newBudget } });
+    toast(`✅ ${teamName} budget set to ${fmtCur(newBudget)}!`);
+    document.getElementById(`set-${teamName}`).value = "";
+  };
+
+  return (
+    <div style={{ padding: "28px 24px", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ fontFamily: "Oswald", fontSize: 28, fontWeight: 700, letterSpacing: 2, marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid var(--border)", color: "var(--accent)" }}>
+        💰 BUDGET MANAGEMENT
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
+        {Object.keys(TEAMS_INIT).map((teamName) => {
+          const teamData = state.teams[teamName];
+          const remaining = teamData.budget - teamData.spent;
+          const percentUsed = Math.round((teamData.spent / teamData.budget) * 100);
+
+          return (
+            <div key={teamName} style={{
+              background: "var(--surface)", border: `1px solid ${teamData.color}33`, borderTop: `3px solid ${teamData.color}`,
+              padding: 20, borderRadius: 6,
+            }}>
+              {/* Team Header */}
+              <div style={{
+                fontFamily: "Oswald", fontSize: 16, fontWeight: 700, color: teamData.color,
+                letterSpacing: 1, marginBottom: 12,
+                padding: "0",
+                borderRadius: "2px",
+                display: "inline-block",
+              }}>
+                {teamName}
+              </div>
+
+              {/* Budget Info */}
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1, marginBottom: 4 }}>TOTAL</div>
+                  <div style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>
+                    {fmtCur(teamData.budget)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1, marginBottom: 4 }}>SPENT</div>
+                  <div style={{ fontFamily: "Share Tech Mono, monospace", fontSize: 18, fontWeight: 700, color: percentUsed > 90 ? "var(--red)" : "var(--accent)" }}>
+                    {fmtCur(teamData.spent)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", width: `${percentUsed}%`, background: percentUsed > 90 ? "var(--red)" : percentUsed > 70 ? "var(--accent)" : "var(--green)",
+                    transition: "width .3s",
+                  }} />
+                </div>
+                <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 6 }}>{percentUsed}% used • {fmtCur(remaining)} left</div>
+              </div>
+
+              {/* Add Funds */}
+              <div style={{ marginBottom: 10, display: "flex", gap: 6 }}>
+                <input
+                  id={`add-${teamName}`}
+                  type="text" placeholder="Add (e.g., 5 or 50L)" defaultValue=""
+                  onKeyDown={(e) => e.key === "Enter" && handleAddFunds(teamName, e.target.value)}
+                  style={{
+                    flex: 1, background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)",
+                    fontFamily: "Share Tech Mono, monospace", fontSize: 12, padding: "8px 10px", outline: "none", borderRadius: 3,
+                  }}
+                />
+                <button onClick={(e) => { e.stopPropagation(); handleAddFunds(teamName, document.getElementById(`add-${teamName}`).value); }} style={{
+                  background: "var(--green)", color: "#000", border: "none", fontFamily: "Oswald",
+                  fontSize: 12, fontWeight: 700, padding: "8px 14px", cursor: "pointer", borderRadius: 3, whiteSpace: "nowrap",
+                }}>➕ ADD</button>
+              </div>
+
+              {/* Set Budget */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <input
+                  id={`set-${teamName}`}
+                  type="text" placeholder="Set (e.g., 7 or 700L)" defaultValue=""
+                  onKeyDown={(e) => e.key === "Enter" && handleSetBudget(teamName, e.target.value)}
+                  style={{
+                    flex: 1, background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)",
+                    fontFamily: "Share Tech Mono, monospace", fontSize: 12, padding: "8px 10px", outline: "none", borderRadius: 3,
+                  }}
+                />
+                <button onClick={(e) => { e.stopPropagation(); handleSetBudget(teamName, document.getElementById(`set-${teamName}`).value); }} style={{
+                  background: "var(--blue)", color: "#fff", border: "none", fontFamily: "Oswald",
+                  fontSize: 12, fontWeight: 700, padding: "8px 14px", cursor: "pointer", borderRadius: 3, whiteSpace: "nowrap",
+                }}>⚙ SET</button>
+              </div>
+              <div style={{ fontSize: 8, color: "var(--muted)", letterSpacing: 0.5 }}>Format: integer (crores), 50L, or 2.5C</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── MANAGE PLAYERS PAGE (ADMIN) ───────────────────────────── */
 function ManagePlayersPage() {
   const { state, dispatch } = useAuction();
   const toast = useToast();
   const { players } = state;
 
-  const blank = { name: "", role: "BAT", country: "India", base: "3", photoUrl: "" };
-  const [form, setForm] = useState(blank);
-  const [photoPreviewErr, setPhotoPreviewErr] = useState(false);
   const [filterRole, setFilterRole] = useState("ALL");
   const [confirmDel, setConfirmDel] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [newTeamName, setNewTeamName] = useState("");
-  const [newTeamColor, setNewTeamColor] = useState("#3b9eff");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetPass, setResetPass] = useState("");
-  const [editingTeam, setEditingTeam] = useState(null);
-  const [editTeamForm, setEditTeamForm] = useState({});
-  const [fundTeam, setFundTeam] = useState(null);
-  const [fundAmount, setFundAmount] = useState("");
-
-  const upd = (k, v) => { setForm(f => ({ ...f, [k]: v })); if (k === "photoUrl") setPhotoPreviewErr(false); };
-
-  const addPlayer = () => {
-    if (!form.name.trim()) { toast("Player name required!", true); return; }
-    if (players.find(p => p.name.toLowerCase() === form.name.trim().toLowerCase())) {
-      toast("Player with that name already exists!", true); return;
-    }
-    const newId = Math.max(...players.map(p => p.id), 0) + 1;
-    const stats = generateStats(form.role);
-    dispatch({
-      type: "ADD_PLAYER",
-      payload: {
-        id: newId,
-        name: form.name.trim(),
-        role: form.role,
-        country: form.country,
-        base: parseCr(form.base) || 30000000,
-        photoUrl: form.photoUrl.trim() || null,
-        generatedStats: stats,
-      },
-    });
-    // Also store in PLAYER_STATS for live bid display
-    PLAYER_STATS[form.name.trim()] = stats;
-    toast(`✅ ${form.name.trim()} added to player pool!`);
-    setForm(blank);
-    setPhotoPreviewErr(false);
-  };
 
   const delPlayer = (id) => {
     const p = players.find(x => x.id === id);
@@ -1887,7 +2319,7 @@ function ManagePlayersPage() {
   const saveEdit = (id) => {
     const player = players.find(p => p.id === id);
     if (!editForm.name.trim()) { toast("Player name required!", true); return; }
-    const newBase = parseCr(editForm.base) || player.base;
+    const newBase = parseLakh(editForm.base) || player.base;
     if (players.find(p => p.id !== id && p.name.toLowerCase() === editForm.name.trim().toLowerCase())) {
       toast("Another player with that name already exists!", true); return;
     }
@@ -1899,53 +2331,10 @@ function ManagePlayersPage() {
     setEditingId(null);
   };
 
-  const addTeam = () => {
-    if (!newTeamName.trim()) { toast("Team name required!", true); return; }
-    if (state.teams[newTeamName.trim()]) { toast("Team already exists!", true); return; }
-    dispatch({
-      type: "ADD_TEAM",
-      payload: { name: newTeamName.trim(), color: newTeamColor }
-    });
-    toast(`✅ Team ${newTeamName.trim()} added!`);
-    setNewTeamName("");
-    setNewTeamColor("#3b9eff");
-  };
-
-  const startEditTeam = (teamName) => {
-    setEditingTeam(teamName);
-    setEditTeamForm({ name: teamName, color: state.teams[teamName].color });
-  };
-
-  const saveEditTeam = () => {
-    if (!editTeamForm.name.trim()) { toast("Team name required!", true); return; }
-    const newName = editTeamForm.name.trim();
-    if (newName !== editingTeam && state.teams[newName]) {
-      toast("A team with that name already exists!", true); return;
-    }
-    dispatch({
-      type: "EDIT_TEAM",
-      payload: { oldName: editingTeam, newName, color: editTeamForm.color }
-    });
-    toast(`✅ Team updated!`);
-    setEditingTeam(null);
-  };
-
-  const addFundsToTeam = (teamName) => {
-    const amt = parseCr(fundAmount);
-    if (!fundAmount.trim() || amt <= 0) { toast("Please enter a valid amount!", true); return; }
-    dispatch({
-      type: "ADD_TEAM_FUNDS",
-      payload: { teamName, amount: amt }
-    });
-    toast(`✅ ₹${fmtCur(amt)} added to ${teamName}!`);
-    setFundTeam(null);
-    setFundAmount("");
-  };
-
-  const resetGame = () => {
+  const resetAuction = () => {
     if (resetPass !== "admin123") { toast("Invalid admin password!", true); return; }
-    dispatch({ type: "RESET_GAME" });
-    toast("✅ Game reset! All players returned, budgets reset.");
+    dispatch({ type: "RESET_AUCTION" });
+    toast("✅ Auction reset! Play another round.");
     setShowResetConfirm(false);
     setResetPass("");
   };
@@ -1983,111 +2372,10 @@ function ManagePlayersPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 24, alignItems: "start" }}>
-
-        {/* ADD PLAYER FORM */}
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderTop: "3px solid var(--accent)", padding: 24, position: "sticky", top: 72 }}>
-          <div style={{ fontFamily: "Oswald", fontSize: 16, letterSpacing: 2, color: "var(--accent)", marginBottom: 20 }}>ADD NEW PLAYER</div>
-
-          {/* Photo preview */}
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-            {form.photoUrl && !photoPreviewErr
-              ? <img src={form.photoUrl} alt="preview" onError={() => setPhotoPreviewErr(true)} style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", objectPosition: "top", border: `2px solid ${ROLE_COLORS[form.role]}55` }} />
-              : <div style={{
-                  width: 80, height: 80, borderRadius: "50%",
-                  background: ROLE_COLORS[form.role] + "22", border: `2px dashed ${ROLE_COLORS[form.role]}44`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "Oswald", fontSize: 28, color: ROLE_COLORS[form.role],
-                }}>
-                  {form.name ? form.name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase() : "?"}
-                </div>
-            }
-          </div>
-
-          {[
-            { label: "Player Name", key: "name", type: "text", placeholder: "e.g. Virat Kohli" },
-            { label: "Photo URL (optional)", key: "photoUrl", type: "text", placeholder: "https://..." },
-          ].map(({ label, key, type, placeholder }) => (
-            <div key={key} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
-              <input
-                type={type} value={form[key]} onChange={e => upd(key, e.target.value)}
-                placeholder={placeholder}
-                style={{
-                  width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                  color: "var(--text)", fontFamily: "Rajdhani, sans-serif", fontSize: 14,
-                  padding: "9px 12px", outline: "none",
-                }}
-              />
-              {key === "photoUrl" && form.photoUrl && photoPreviewErr && (
-                <div style={{ fontSize: 10, color: "var(--red)", marginTop: 4 }}>⚠ Image failed to load — initials will be shown</div>
-              )}
-              {key === "photoUrl" && !form.photoUrl && (
-                <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>Leave blank to use auto-generated initials avatar</div>
-              )}
-            </div>
-          ))}
-
-          {/* Role select */}
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>
-              Role <span style={{ color: ROLE_COLORS[form.role], fontSize: 10, marginLeft: 6 }}>(team limit: ×{SLOT_LIMITS[form.role]})</span>
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {Object.entries(ROLES).map(([rKey, rLabel]) => (
-                <button key={rKey} onClick={() => upd("role", rKey)} style={{
-                  padding: "6px 12px", fontSize: 11, fontWeight: 700, letterSpacing: 1,
-                  fontFamily: "Rajdhani, sans-serif", cursor: "pointer",
-                  background: form.role === rKey ? ROLE_COLORS[rKey] + "22" : "var(--bg)",
-                  border: `1px solid ${form.role === rKey ? ROLE_COLORS[rKey] : "var(--border)"}`,
-                  color: form.role === rKey ? ROLE_COLORS[rKey] : "var(--muted)",
-                }}>{rLabel}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Country */}
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>Country</div>
-            <select value={form.country} onChange={e => upd("country", e.target.value)} style={{
-              width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-              color: "var(--text)", fontFamily: "Rajdhani, sans-serif", fontSize: 14,
-              padding: "9px 12px", outline: "none",
-            }}>
-              {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-
-          {/* Base price */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>Base Price (Crores ₹)</div>
-            <input
-              type="number" value={form.base} onChange={e => upd("base", e.target.value)}
-              style={{
-                width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                color: "var(--accent)", fontFamily: "Share Tech Mono, monospace", fontSize: 16,
-                padding: "9px 12px", outline: "none",
-              }}
-            />
-            <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>= {fmtCur(parseCr(form.base) || 0)}</div>
-          </div>
-
-          {/* Stats note */}
-          <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", padding: "10px 14px", marginBottom: 16, fontSize: 11, color: "var(--muted)", letterSpacing: 0.5 }}>
-            📊 T20 career stats will be <strong style={{ color: "var(--accent)" }}>auto-generated</strong> based on role ({ROLES[form.role]})
-          </div>
-
-          <button onClick={addPlayer} style={{
-            width: "100%", background: "var(--accent)", color: "#000", border: "none",
-            fontFamily: "Oswald", fontSize: 16, fontWeight: 600, letterSpacing: 2,
-            padding: "14px", cursor: "pointer",
-          }}>＋ ADD TO AUCTION POOL</button>
-        </div>
-
-        {/* PLAYER LIST */}
-        <div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
-            {["ALL", "BAT", "BWL", "WK", "AR"].map(r => (
+      {/* PLAYER LIST */}
+      <div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
+          {["ALL", "BAT", "BWL", "WK", "AR"].map(r => (
               <button key={r} onClick={() => setFilterRole(r)} style={{
                 background: filterRole === r ? "var(--accent)" : "var(--surface)",
                 border: `1px solid ${filterRole === r ? "var(--accent)" : "var(--border)"}`,
@@ -2182,192 +2470,86 @@ function ManagePlayersPage() {
             ))}
           </div>
         </div>
-      </div>
 
       {/* TEAM MANAGEMENT SECTION */}
       <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid var(--border)" }}>
         <div style={{ fontFamily: "Oswald", fontSize: 20, fontWeight: 700, letterSpacing: 2, marginBottom: 16, color: "var(--accent)" }}>
-          👥 TEAM MANAGEMENT
+          👥 EDIT TEAMS
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 24 }}>
-          {/* Add New Team */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 24 }}>
+          {/* Teams Overview */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderTop: "3px solid var(--accent)", padding: 20 }}>
-            <div style={{ fontFamily: "Oswald", fontSize: 14, letterSpacing: 1.5, color: "var(--accent)", marginBottom: 16 }}>＋ ADD NEW TEAM</div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>Team Name</div>
-              <input
-                type="text" value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
-                placeholder="e.g. Delhi Capitals"
-                style={{
-                  width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
-                  color: "var(--text)", fontFamily: "Rajdhani, sans-serif", fontSize: 14,
-                  padding: "9px 12px", outline: "none",
-                }}
-              />
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>Team Color</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  type="color" value={newTeamColor} onChange={e => setNewTeamColor(e.target.value)}
-                  style={{
-                    width: 50, height: 50, border: "2px solid var(--border)", cursor: "pointer",
-                    borderRadius: 4,
-                  }}
-                />
-                <div style={{
-                  background: newTeamColor, width: 50, height: 50, borderRadius: 4,
-                  border: "2px solid var(--border)"
-                }} title={newTeamColor}></div>
-                <span style={{ fontSize: 12, fontFamily: "Share Tech Mono", color: "var(--muted)" }}>{newTeamColor}</span>
-              </div>
-            </div>
-            <button onClick={addTeam} style={{
-              width: "100%", background: "var(--accent)", color: "#000", border: "none",
-              fontFamily: "Oswald", fontSize: 14, fontWeight: 600, letterSpacing: 1.5,
-              padding: "11px", cursor: "pointer",
-            }}>ADD TEAM</button>
-          </div>
-
-          {/* Edit Existing Teams */}
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderTop: "3px solid var(--accent)", padding: 20 }}>
-            <div style={{ fontFamily: "Oswald", fontSize: 14, letterSpacing: 1.5, color: "var(--accent)", marginBottom: 16 }}>✎ EDIT TEAMS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 300, overflowY: "auto" }}>
-              {Object.entries(state.teams).map(([teamName, teamData]) => (
-                editingTeam === teamName ? (
-                  <div key={teamName} style={{
-                    background: "var(--accent)", color: "#000", border: "2px solid var(--accent)",
-                    padding: "10px 12px", borderRadius: "3px", display: "flex", flexDirection: "column", gap: 8,
-                  }}>
-                    <input
-                      type="text" value={editTeamForm.name} onChange={e => setEditTeamForm(f => ({ ...f, name: e.target.value }))}
-                      style={{
-                        background: "rgba(0,0,0,0.2)", border: "1px solid rgba(0,0,0,0.3)", color: "#000",
-                        padding: "6px 10px", fontFamily: "Rajdhani, sans-serif", fontSize: 12, outline: "none",
-                      }}
-                    />
-                    <input
-                      type="color" value={editTeamForm.color} onChange={e => setEditTeamForm(f => ({ ...f, color: e.target.value }))}
-                      style={{
-                        width: "100%", height: 40, border: "2px solid rgba(0,0,0,0.3)", borderRadius: 3, cursor: "pointer",
-                      }}
-                    />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={saveEditTeam} style={{
-                        flex: 1, background: "#000", color: "var(--accent)", border: "none",
-                        fontFamily: "Rajdhani", fontSize: 11, fontWeight: 700, padding: "5px", cursor: "pointer",
-                      }}>SAVE</button>
-                      <button onClick={() => setEditingTeam(null)} style={{
-                        flex: 1, background: "rgba(0,0,0,0.3)", color: "#000", border: "none",
-                        fontFamily: "Rajdhani", fontSize: 11, padding: "5px", cursor: "pointer",
-                      }}>CANCEL</button>
-                    </div>
-                  </div>
-                ) : fundTeam === teamName ? (
-                  <div key={teamName} style={{
-                    background: "var(--green)", color: "#000", border: "2px solid var(--green)",
-                    padding: "10px 12px", borderRadius: "3px", display: "flex", flexDirection: "column", gap: 8,
-                  }}>
-                    <div style={{ fontSize: 11, fontWeight: 700 }}>Add Funds to {teamName}</div>
-                    <input
-                      type="text" value={fundAmount} onChange={e => setFundAmount(e.target.value)}
-                      placeholder="e.g. 1.5" title="Enter amount in Crores"
-                      onKeyDown={e => e.key === "Enter" && addFundsToTeam(teamName)}
-                      style={{
-                        background: "rgba(0,0,0,0.2)", border: "1px solid rgba(0,0,0,0.3)", color: "#000",
-                        padding: "6px 10px", fontFamily: "Share Tech Mono, monospace", fontSize: 12, outline: "none",
-                      }}
-                    />
-                    <div style={{ fontSize: 9, color: "rgba(0,0,0,0.8)" }}>Current: {fmtCur(teamData.budget)}</div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => addFundsToTeam(teamName)} style={{
-                        flex: 1, background: "#000", color: "var(--green)", border: "none",
-                        fontFamily: "Rajdhani", fontSize: 11, fontWeight: 700, padding: "5px", cursor: "pointer",
-                      }}>ADD</button>
-                      <button onClick={() => { setFundTeam(null); setFundAmount(""); }} style={{
-                        flex: 1, background: "rgba(0,0,0,0.3)", color: "#000", border: "none",
-                        fontFamily: "Rajdhani", fontSize: 11, padding: "5px", cursor: "pointer",
-                      }}>CANCEL</button>
-                    </div>
-                  </div>
-                ) : (
+              {Object.keys(TEAMS_INIT).map((teamName) => {
+                const teamData = state.teams[teamName];
+                return (
                   <div key={teamName} style={{
                     background: "var(--bg)", border: `2px solid ${teamData.color}`,
-                    padding: "10px 12px", borderRadius: "3px", display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "12px", borderRadius: "3px", display: "flex", justifyContent: "space-between", alignItems: "center",
                   }}>
                     <div>
-                      <div style={{ color: "var(--accent)", fontWeight: 700, marginBottom: 2, fontFamily: "Rajdhani, sans-serif", fontSize: 11 }}>
+                      <div style={{ color: "var(--accent)", fontWeight: 700, marginBottom: 4, fontFamily: "Rajdhani, sans-serif", fontSize: 12 }}>
                         {teamName}
                       </div>
-                      <div style={{ color: "var(--muted)", fontSize: 9, fontFamily: "Share Tech Mono, monospace" }}>
+                      <div style={{ color: "var(--muted)", fontSize: 10, fontFamily: "Share Tech Mono, monospace" }}>
                         Budget: {fmtCur(teamData.budget)}
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => setFundTeam(teamName)} style={{
-                        background: "none", border: "1px solid var(--green)", color: "var(--green)",
-                        fontFamily: "Rajdhani", fontSize: 10, padding: "3px 8px", cursor: "pointer", fontWeight: 600,
-                      }}>+$</button>
-                      <button onClick={() => startEditTeam(teamName)} style={{
-                        background: "none", border: "1px solid var(--accent)", color: "var(--accent)",
-                        fontFamily: "Rajdhani", fontSize: 10, padding: "3px 8px", cursor: "pointer",
-                      }}>EDIT</button>
-                      <button onClick={() => {
-                        if (window.confirm(`Delete team "${teamName}" and unassign all players?`)) {
-                          console.log(`⚠️ USER CONFIRMED DELETE for team: "${teamName}"`);
-                          dispatch({ type: "DELETE_TEAM", payload: { teamName } });
-                          toast(`✓ Team "${teamName}" deleted - syncing to Firebase`);
-                        }
-                      }} style={{
-                        background: "none", border: "1px solid var(--red)", color: "var(--red)",
-                        fontFamily: "Rajdhani", fontSize: 10, padding: "3px 8px", cursor: "pointer",
-                      }}>DEL</button>
-                    </div>
                   </div>
-                )
-              ))}
+                );
+              })}
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Team Credentials */}
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderTop: "3px solid var(--accent)", padding: 20 }}>
-            <div style={{ fontFamily: "Oswald", fontSize: 14, letterSpacing: 1.5, color: "var(--accent)", marginBottom: 16 }}>🔐 LOGIN CREDENTIALS</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 400, overflowY: "auto" }}>
-              {Object.entries(USERS).map(([uname, u]) => (
-                <div key={uname} style={{
-                  background: "var(--bg)", border: "1px solid var(--border)",
-                  padding: "10px 12px", borderRadius: "3px", fontSize: 11,
+      {/* TEAM CREDENTIALS SECTION */}
+      <div style={{ marginTop: 32, paddingTop: 24, borderTop: "1px solid var(--border)" }}>
+        <div style={{ fontFamily: "Oswald", fontSize: 20, fontWeight: 700, letterSpacing: 2, marginBottom: 16, color: "var(--accent)" }}>
+          🔑 TEAM CREDENTIALS
+        </div>
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16,
+        }}>
+          {Object.keys(TEAMS_INIT).map((teamName) => {
+            const creds = state.teamCredentials[teamName];
+            const teamData = state.teams[teamName];
+            return (
+              <div key={teamName} style={{
+                background: "var(--surface)", border: `2px solid ${teamData?.color}44`,
+                borderLeft: `4px solid ${teamData?.color}`, padding: 16, borderRadius: 4,
+              }}>
+                <div style={{
+                  fontFamily: "Oswald", fontSize: 13, fontWeight: 700, letterSpacing: 1,
+                  color: teamData?.color, marginBottom: 12,
+                  padding: "0",
+                  borderRadius: "2px",
+                  display: "inline-block",
                 }}>
-                  <div style={{ color: "var(--accent)", fontWeight: 700, marginBottom: 4, fontFamily: "Share Tech Mono, monospace" }}>
-                    {uname}
-                  </div>
-                  <div style={{ color: "var(--muted)", fontFamily: "Share Tech Mono, monospace", marginBottom: 2 }}>
-                    Pass: {u.pass}
-                  </div>
-                  <div style={{ color: "var(--border)", fontSize: 9 }}>
-                    {u.label}
+                  {teamName}
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1, marginBottom: 4, textTransform: "uppercase" }}>Username</div>
+                  <div style={{
+                    fontFamily: "Share Tech Mono, monospace", fontSize: 12, color: "var(--text)",
+                    background: "var(--bg)", padding: "8px 10px", borderRadius: 3, wordBreak: "break-all",
+                  }}>
+                    {teamName}
                   </div>
                 </div>
-              ))}
-              {Object.entries(state.teamCredentials).map(([creds_name, creds]) => (
-                <div key={creds_name} style={{
-                  background: "var(--bg)", border: "1px solid var(--accent)33",
-                  padding: "10px 12px", borderRadius: "3px", fontSize: 11,
-                }}>
-                  <div style={{ color: "var(--accent)", fontWeight: 700, marginBottom: 4, fontFamily: "Share Tech Mono, monospace" }}>
-                    {creds_name.toLowerCase().replace(/\s+/g, "_")}
-                  </div>
-                  <div style={{ color: "var(--muted)", fontFamily: "Share Tech Mono, monospace", marginBottom: 2 }}>
-                    Pass: {creds.pass}
-                  </div>
-                  <div style={{ color: "var(--accent)", fontSize: 9 }}>
-                    📍 Dynamic Team
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1, marginBottom: 4, textTransform: "uppercase" }}>Password</div>
+                  <div style={{
+                    fontFamily: "Share Tech Mono, monospace", fontSize: 13, fontWeight: 700, color: "var(--accent)",
+                    background: "var(--bg)", padding: "10px", borderRadius: 3, letterSpacing: 1.5,
+                  }}>
+                    {creds?.pass || "—"}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -2379,20 +2561,20 @@ function ManagePlayersPage() {
 
         {!showResetConfirm ? (
           <button onClick={() => setShowResetConfirm(true)} style={{
-            background: "var(--red)", color: "#fff", border: "none",
+            background: "var(--accent)", color: "#000", border: "none",
             fontFamily: "Oswald", fontSize: 14, fontWeight: 600, letterSpacing: 1.5,
             padding: "12px 24px", cursor: "pointer",
-          }}>🔄 RESET ENTIRE GAME</button>
+          }}>🔄 NEW GAME</button>
         ) : (
-          <div style={{ background: "var(--surface)", border: "2px solid var(--red)", padding: 20, borderRadius: "4px" }}>
-            <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 16, fontWeight: 600 }}>
-              ⚠ WARNING: This will reset all players, budgets, and history. Admin password required.
+          <div style={{ background: "var(--surface)", border: "2px solid var(--accent)", padding: 20, borderRadius: "4px" }}>
+            <div style={{ fontSize: 12, color: "var(--accent)", marginBottom: 16, fontWeight: 600 }}>
+              ℹ Resetting auction pool & budgets for a new game. Admin password required.
             </div>
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 11, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 6 }}>Admin Password</div>
               <input
                 type="password" value={resetPass} onChange={e => setResetPass(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && resetGame()}
+                onKeyDown={e => e.key === "Enter" && resetAuction()}
                 placeholder="Enter admin password"
                 style={{
                   width: "100%", background: "var(--bg)", border: "1px solid var(--border)",
@@ -2402,8 +2584,8 @@ function ManagePlayersPage() {
               />
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={resetGame} style={{
-                background: "var(--red)", color: "#fff", border: "none",
+              <button onClick={resetAuction} style={{
+                background: "var(--accent)", color: "#000", border: "none",
                 fontFamily: "Rajdhani", fontSize: 12, fontWeight: 700, letterSpacing: 1,
                 padding: "8px 16px", cursor: "pointer",
               }}>CONFIRM RESET</button>
@@ -2471,10 +2653,12 @@ function AppInner() {
     auction:  AuctionPage,
     livebid:  LiveBidPage,
     display:  DisplayPage,
+    squads:   TeamSquadsPage,
     team:     TeamPage,
     overview: OverviewPage,
     history:  HistoryPage,
     manage:   ManagePlayersPage,
+    budget:   BudgetManagementPage,
   };
   const CurrentPage = pages[page] || AuctionPage;
 

@@ -65,7 +65,7 @@ export function subscribeToAuction(callback) {
 }
 
 /**
- * Update auction data in Firestore
+ * Update auction data in Firestore (merges with existing data)
  */
 export async function updateAuctionData(data) {
   try {
@@ -78,6 +78,26 @@ export async function updateAuctionData(data) {
     console.log("✅ Firestore update successful");
   } catch (error) {
     console.error("Error updating auction data:", error);
+    throw error;
+  }
+}
+
+/**
+ * Sync fresh config to Firebase (completely replaces document - no merge)
+ * Used when syncing TEAMS_INIT and PLAYERS_INIT to clear old data
+ */
+export async function syncConfigToFirebase(data) {
+  try {
+    const auctionDocRef = doc(db, "auction", "current");
+    console.log("🔄 SYNCING CONFIG TO FIREBASE (complete replacement):", data);
+    // Use merge: false to completely replace, not merge
+    await setDoc(auctionDocRef, {
+      ...data,
+      updatedAt: Date.now(),
+    }, { merge: false });
+    console.log("✅ Config synced to Firebase successfully (old data cleared)");
+  } catch (error) {
+    console.error("❌ Error syncing config to Firebase:", error);
     throw error;
   }
 }
