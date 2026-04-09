@@ -35,7 +35,7 @@ const USERS = {
   rr_mgr:    { pass: "f8k3z7",       role: "team",  team: "RAJASTHAN ROYALS",         label: "RAJASTHAN ROYALS" },
   rcb_mgr:   { pass: "c5y4x1",       role: "team",  team: "ROYAL CHALLENGERS BENGALURU", label: "ROYAL CHALLENGERS BENGALURU" },
   srh_mgr:   { pass: "m7a2b6",       role: "team",  team: "SUNRISERS HYDERABAD",      label: "SUNRISERS HYDERABAD" },
-  bidder:    { pass: "bidder10042026",       role: "user",  team: null,                          label: "BIDDER / VIEWER" },
+  viewer: { pass: "viewer10042026",    role: "display", team: null,                      label: "DISPLAY USER" },
 };
 
 // Build team credentials from USERS object
@@ -802,7 +802,11 @@ function TopBar() {
   const { currentUser, page } = state;
   const isAdmin = currentUser?.role === "admin";
 
-  const nav = [
+  const isDisplayUser = currentUser?.role === "display";
+
+  const nav = isDisplayUser ? [
+    { id: "display",   label: "📺 DISPLAY" },
+  ] : [
     { id: "auction",   label: isAdmin ? "AUCTION (ADMIN)" : "AUCTION" },
     { id: "livebid",   label: isAdmin ? "🔴 LIVE BID" : "🔴 LIVE" },
     { id: "display",   label: "📺 DISPLAY" },
