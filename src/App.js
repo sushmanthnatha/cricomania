@@ -26,16 +26,16 @@ const SLOT_LABELS = { BAT: "Batsmen", BWL: "Bowlers", WK: "Wicket-keeper", AR: "
 const TOTAL_SQUAD = Object.values(SLOT_LIMITS).reduce((a, b) => a + b, 0); // 8
 
 const USERS = {
-  admin:     { pass: "admin123",   role: "admin", team: null,                          label: "ADMIN" },
-  csk_mgr:   { pass: "csk2024",    role: "team",  team: "CHENNAI SUPER KINGS",       label: "CHENNAI SUPER KINGS" },
-  dc_mgr:    { pass: "dc2024",     role: "team",  team: "DELHI CAPITALS",            label: "DELHI CAPITALS" },
-  kkr_mgr:   { pass: "kkr2024",    role: "team",  team: "KOLKATA KNIGHT RIDERS",    label: "KOLKATA KNIGHT RIDERS" },
-  mi_mgr:    { pass: "mi2024",     role: "team",  team: "MUMBAI INDIANS",             label: "MUMBAI INDIANS" },
-  pbks_mgr:  { pass: "pbks2024",   role: "team",  team: "PUNJAB KINGS",             label: "PUNJAB KINGS" },
-  rr_mgr:    { pass: "rr2024",     role: "team",  team: "RAJASTHAN ROYALS",         label: "RAJASTHAN ROYALS" },
-  rcb_mgr:   { pass: "rcb2024",    role: "team",  team: "ROYAL CHALLENGERS BENGALURU", label: "ROYAL CHALLENGERS BENGALURU" },
-  srh_mgr:   { pass: "srh2024",    role: "team",  team: "SUNRISERS HYDERABAD",      label: "SUNRISERS HYDERABAD" },
-  bidder:    { pass: "bidder123",  role: "user",  team: null,                          label: "BIDDER / VIEWER" },
+  admin:     { pass: "admin10042026",    role: "admin", team: null,                          label: "ADMIN" },
+  csk_mgr:   { pass: "k7m2x9",       role: "team",  team: "CHENNAI SUPER KINGS",       label: "CHENNAI SUPER KINGS" },
+  dc_mgr:    { pass: "p4b8w1",       role: "team",  team: "DELHI CAPITALS",            label: "DELHI CAPITALS" },
+  kkr_mgr:   { pass: "j5n3t6",       role: "team",  team: "KOLKATA KNIGHT RIDERS",    label: "KOLKATA KNIGHT RIDERS" },
+  mi_mgr:    { pass: "h6r1q8",       role: "team",  team: "MUMBAI INDIANS",             label: "MUMBAI INDIANS" },
+  pbks_mgr:  { pass: "v2s9d4",       role: "team",  team: "PUNJAB KINGS",             label: "PUNJAB KINGS" },
+  rr_mgr:    { pass: "f8k3z7",       role: "team",  team: "RAJASTHAN ROYALS",         label: "RAJASTHAN ROYALS" },
+  rcb_mgr:   { pass: "c5y4x1",       role: "team",  team: "ROYAL CHALLENGERS BENGALURU", label: "ROYAL CHALLENGERS BENGALURU" },
+  srh_mgr:   { pass: "m7a2b6",       role: "team",  team: "SUNRISERS HYDERABAD",      label: "SUNRISERS HYDERABAD" },
+  bidder:    { pass: "bidder10042026",       role: "user",  team: null,                          label: "BIDDER / VIEWER" },
 };
 
 const TEAMS_INIT = {
@@ -249,10 +249,6 @@ function getTeamT20Rating(players, teamName) {
 }
 
 /* ─── REDUCER ───────────────────────────────────────────────── */
-const generateTeamPassword = (teamName) => {
-  const basePass = teamName.toLowerCase().replace(/\s+/g, "").substring(0, 8);
-  return basePass + "2024";
-};
 
 // Helper: Clear localStorage if version changed, but preserve user login and theme
 const checkAndClearOldCache = () => {
@@ -371,11 +367,7 @@ function reducer(state, action) {
     case "ADD_TEAM": {
       const { name, color } = action.payload;
       const teams = { ...state.teams, [name]: { budget: BUDGET, spent: 0, color } };
-      const teamCreds = { ...state.teamCredentials };
-      if (!teamCreds[name]) {
-        teamCreds[name] = { pass: generateTeamPassword(name), label: name };
-      }
-      return { ...state, teams, teamCredentials: teamCreds };
+      return { ...state, teams };
     }
 
     case "EDIT_TEAM": {
@@ -465,9 +457,6 @@ function reducer(state, action) {
       const players = JSON.parse(JSON.stringify(PLAYERS_INIT));
       const teams = JSON.parse(JSON.stringify(TEAMS_INIT));
       const teamCreds = {};
-      Object.keys(teams).forEach(teamName => {
-        teamCreds[teamName] = { pass: generateTeamPassword(teamName), label: teamName };
-      });
       // Clear localStorage
       localStorage.removeItem("cm_players");
       localStorage.removeItem("cm_teams");
