@@ -38,6 +38,14 @@ const USERS = {
   bidder:    { pass: "bidder10042026",       role: "user",  team: null,                          label: "BIDDER / VIEWER" },
 };
 
+// Build team credentials from USERS object
+const TEAM_CREDENTIALS_INIT = Object.entries(USERS)
+  .filter(([_, user]) => user.role === "team")
+  .reduce((acc, [_, user]) => {
+    acc[user.team] = { pass: user.pass, label: user.team };
+    return acc;
+  }, {});
+
 const TEAMS_INIT = {
   "CHENNAI SUPER KINGS":         { budget: BUDGET, spent: 0, color: "#ffc32f" },
   "DELHI CAPITALS":              { budget: BUDGET, spent: 0, color: "#00d4ff" },
@@ -279,7 +287,7 @@ const initialState = {
     return PLAYERS_INIT;
   })(),
   teams:   JSON.parse(localStorage.getItem("cm_teams")   || "null") || JSON.parse(JSON.stringify(TEAMS_INIT)),
-  teamCredentials: JSON.parse(localStorage.getItem("cm_teamCreds") || "{}"),
+  teamCredentials: JSON.parse(localStorage.getItem("cm_teamCreds") || "null") || TEAM_CREDENTIALS_INIT,
   history: JSON.parse(localStorage.getItem("cm_history") || "[]"),
   livePlayerId: JSON.parse(localStorage.getItem("cm_livePlayer") || "null"),
   page: "auction",
@@ -456,7 +464,7 @@ function reducer(state, action) {
       // Used when config changes and you want Firebase to match local constants
       const players = JSON.parse(JSON.stringify(PLAYERS_INIT));
       const teams = JSON.parse(JSON.stringify(TEAMS_INIT));
-      const teamCreds = {};
+      const teamCreds = JSON.parse(JSON.stringify(TEAM_CREDENTIALS_INIT));
       // Clear localStorage
       localStorage.removeItem("cm_players");
       localStorage.removeItem("cm_teams");
